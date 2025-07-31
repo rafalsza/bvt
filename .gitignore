@@ -1,0 +1,33 @@
+__*__
+
+# Ignore python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore virtual environment
+venv/
+.venv/
+
+# Ignore IDE settings
+.vscode
+.idea
+.DS_Store
+idea/
+.idea/
+.vscode/
+
+# Ignore credentials file
+creds.yml
+
+# Ignore test/live files
+test*.txt
+live*.txt
+*.log
+*.json
+*.db
+# Ignore special files
+_*.txt
+*.zip
+*.tmp
+

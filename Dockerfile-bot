@@ -1,0 +1,15 @@
+FROM python:3.12.11-slim-buster
+
+
+COPY /Binance_volatility_trading_bot/requirements-bot.txt ./
+RUN python -m pip install --upgrade pip\
+  && pip install --no-cache-dir -r requirements-bot.txt
+
+COPY /user_data/. ./user_data/
+
+WORKDIR /Binance_volatility_trading_bot
+COPY /Binance_volatility_trading_bot/. ./Binance_volatility_trading_bot/
+
+EXPOSE 8501
+	
+CMD ["python", "BinanceDetectMoonings.py"]
