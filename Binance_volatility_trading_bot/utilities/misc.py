@@ -4,13 +4,12 @@ from datetime import datetime, timedelta
 profile_summary_py_file_name = "profile_summary.json"
 
 
-def notify_bot_pause(user_data_path, flag, TIME_TO_WAIT):
+def notify_bot_pause(user_data_path, flag, time_to_wait):
     """
-
     Args:
         user_data_path:
         flag:
-        TIME_TO_WAIT: in minutes
+        time_to_wait: in minutes
     Returns:
 
     """
@@ -18,7 +17,7 @@ def notify_bot_pause(user_data_path, flag, TIME_TO_WAIT):
     with open(user_data_path + profile_summary_py_file_name) as f:
         profile_summary = json.load(f)
     profile_summary['bot_paused'] = flag
-    market_next_check_time = datetime.now() + timedelta(minutes=TIME_TO_WAIT)
+    market_next_check_time = datetime.now() + timedelta(minutes=time_to_wait)
     profile_summary['market_next_check_time'] = str(market_next_check_time)
 
     with open(user_data_path + profile_summary_py_file_name, 'w') as f:
@@ -27,7 +26,7 @@ def notify_bot_pause(user_data_path, flag, TIME_TO_WAIT):
     try:
         with open('UI/update_UI.py', "r") as fp:
             update = int(fp.read().split('=')[1])
-    except:
+    except (FileNotFoundError, IndexError, ValueError):
         update = 0
 
     with open('UI/update_UI.py', "w") as fp:

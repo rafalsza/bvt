@@ -36,26 +36,38 @@ class RiskManager:
 
         try:
             logger.info(f"⚖️ Validating {len(signals)} signals")
-
-            slots_used = self.portfolio_manager.get_portfolio_summary().get(
-                "active_positions", 0
-            )
+            portfolio_summary = self.portfolio_manager.get_portfolio_summary()
+            slots_used = portfolio_summary.get("active_positions", 0)
             max_slots = self.TRADE_SLOTS
 
             for coin, signal in signals.items():
-                available_slots = max_slots - slots_used
-                if available_slots <= 0:
+                if not isinstance(signal, dict) or not coin:
                     logger.warning(
-                        "⚠️ No trade slots left during validation, stopping validation process"
+                        f"⚠️ Invalid signal for {coin}: missing or invalid data"
                     )
-                    break
+                    continue
 
-                if self._passes_all_risk_checks(coin):
-                    validated[coin] = signal
-                    slots_used += 1
-                    logger.debug(f"⚖️ Signal validated and slot reserved for {coin}")
+                signal_type = signal.get("signal_type", "buy")
+                is_sell = "sell_signal" in signal or signal_type == "sell"
+
+                if is_sell:
+                    if self._passes_all_risk_checks(coin, is_sell, portfolio_summary):
+                        validated[coin] = signal
+                        logger.debug(f"⚖️ Sell signal validated for {coin}")
                 else:
-                    logger.debug(f"⚖️ Signal for {coin} did not pass risk checks")
+                    available_slots = max_slots - slots_used
+                    if available_slots <= 0:
+                        logger.warning(
+                            "⚠️ No trade slots left during validation, stopping validation process"
+                        )
+                        break
+
+                    if self._passes_all_risk_checks(coin, is_sell, portfolio_summary):
+                        validated[coin] = signal
+                        slots_used += 1
+                        logger.debug(f"⚖️ Signal validated and slot reserved for {coin}")
+                    else:
+                        logger.debug(f"⚖️ Signal for {coin} did not pass risk checks")
 
             logger.debug(f"⚖️ Validated {len(validated)} out of {len(signals)} signals")
             return validated
@@ -64,22 +76,28 @@ class RiskManager:
             logger.error(f"💥 Error validating signals: {e}")
             return {}
 
-    def _passes_all_risk_checks(self, coin: str) -> bool:
+    def _passes_all_risk_checks(
+        self, coin: str, is_sell: bool, portfolio_summary: Dict[str, Any]
+    ) -> bool:
         """
         Check if coin passes all risk validation checks.
 
         Args:
             coin: Trading pair symbol
+            is_sell: Whether the signal is a sell
+            portfolio_summary: Portfolio summary data
 
         Returns:
             bool: True if all checks pass
         """
         risk_checks = [
-            self._check_position_size_limit(coin),
+            self._check_position_size_limit(coin, portfolio_summary),
             self._check_cooloff_period(coin),
             self._check_session_limits(),
-            self._check_trade_slots(),
         ]
+
+        if not is_sell:
+            risk_checks.append(self._check_trade_slots(portfolio_summary))
 
         return all(risk_checks)
 
@@ -135,7 +153,9 @@ class RiskManager:
             logger.error(f"💥 Error calculating position size: {e}")
             return 0.0
 
-    def _check_position_size_limit(self, coin: str) -> bool:
+    def _check_position_size_limit(
+        self, coin: str, portfolio_summary: Dict[str, Any]
+    ) -> bool:
         """
         Check if position size is within acceptable limits.
 
@@ -148,7 +168,6 @@ class RiskManager:
         try:
             if not self.portfolio_manager:
                 return False
-            portfolio_summary = self.portfolio_manager.get_portfolio_summary()
             max_per_coin = self.TRADE_TOTAL / self.TRADE_SLOTS
             for position in portfolio_summary.get("positions", []):
                 if position["symbol"] == coin and position["value"] >= max_per_coin:
@@ -219,13 +238,12 @@ class RiskManager:
             logger.error(f"💥 Error checking session limits: {e}")
             return True
 
-    def _check_trade_slots(self) -> bool:
+    def _check_trade_slots(self, portfolio_summary: Dict[str, Any]) -> bool:
         """Check if there are available trade slots using portfolio data."""
         try:
             if not self.portfolio_manager:
                 return False
 
-            portfolio_summary = self.portfolio_manager.get_portfolio_summary()
             active_positions = portfolio_summary.get("active_positions", 0)
 
             available_slots = self.TRADE_SLOTS - active_positions

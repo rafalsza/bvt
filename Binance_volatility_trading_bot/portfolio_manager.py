@@ -40,28 +40,30 @@ class PortfolioManager:
 
         # File paths
         self.coins_bought_file_path = f"{user_data_path}/coins_bought.json"
-        self.coins_bought = {}
 
         logger.info("💼 Portfolio manager initialized")
 
     def load_open_positions(self):
-        """Load open positions from database via DbInterface."""
+        """Load open positions from database and update JSON backup."""
         try:
-            self.coins_bought = self.db_interface.get_open_positions()
-            logger.info(f"💼 Loaded {len(self.coins_bought)} open positions")
+            positions = self.db_interface.get_open_positions()
+            logger.info(f"💼 Loaded {len(positions)} open positions from database")
 
-            if self.coins_bought:
-                self.save_current_state()
+            # Update JSON backup with database positions
+            self.save_current_state()
         except Exception as e:
-            logger.error(f"💥 Failed to load open positions: {e}")
+            logger.error(f"💥 Failed to load open positions from database: {e}")
             try:
-                self.coins_bought = self.load_from_json_backup()
+                positions = self.load_from_json_backup()
                 logger.warning(
-                    f"💼 Using JSON backup - loaded {len(self.coins_bought)} positions"
+                    f"💼 Using JSON backup - loaded {len(positions)} positions"
                 )
+                # Restore positions to database
+                for symbol, position in positions.items():
+                    self.db_interface.add_record(position)
+                logger.info("💼 Restored positions to database from JSON backup")
             except Exception as backup_error:
                 logger.error(f"💥 Failed to load from JSON backup: {backup_error}")
-                self.coins_bought = {}
 
     def load_from_json_backup(self):
         """Load positions from JSON backup file as fallback."""
@@ -89,19 +91,19 @@ class PortfolioManager:
         """Get portfolio status using DbInterface."""
         try:
             stats = self.db_interface.get_portfolio_statistics()
+            positions = self.db_interface.get_open_positions()
 
             return {
                 "positions": stats.get("open_positions", 0),
                 "total_exposure": stats.get("total_exposure", 0),
                 "unrealized_pnl": stats.get("unrealized_pnl", 0),
                 "available_slots": (
-                    max(0, self.TRADE_SLOTS - stats.get("open_positions", 0))
+                    max(0, self.TRADE_SLOTS - len(positions))
                     if self.TRADE_SLOTS > 0
                     else float("inf")
                 ),
-                "coins_bought": self.coins_bought.copy(),
+                "coins_bought": positions.copy(),
             }
-
         except Exception as e:
             logger.error(f"💥 Error getting portfolio status: {e}")
             return {"positions": 0, "total_exposure": 0, "unrealized_pnl": 0}
@@ -115,7 +117,7 @@ class PortfolioManager:
                 return
 
             # Check if we already have this position
-            if symbol in self.coins_bought:
+            if self.db_interface.get_position_details(symbol):
                 logger.warning(f"⚠️ Already have position in {symbol}")
                 return
 
@@ -139,20 +141,7 @@ class PortfolioManager:
             # Log to database
             self._log_buy_transaction(order_data, signal)
 
-            # Log to json backup
-            self.coins_bought[symbol] = {
-                "symbol": order_data.get("symbol"),
-                "order_id": order_data.get("orderId"),
-                "timestamp": order_data.get("transactTime"),
-                "volume": float(order_data.get("volume")),
-                "bought_at": float(order_data.get("avgPrice")),
-                "time": datetime.now().isoformat(),
-                "buy_signal": signal.get("buy_signal", "unknown"),
-                "tp_perc": self.TAKE_PROFIT,
-                "sl_perc": self.STOP_LOSS,
-                "TTP_TSL": False,
-            }
-
+            # Update JSON backup
             self.save_current_state()
             logger.info(
                 f"🟢 BUY executed: {symbol} - Volume: {volume:.8f} - Price: {current_price:.8f}"
@@ -173,25 +162,22 @@ class PortfolioManager:
             logger.error(f"💥 Error executing buy: {e}")
 
     def execute_sell(self, symbol: str, reason: str):
-        """Execute sell order and update database."""
+        """Execute sell order and update database and JSON."""
         try:
-            if symbol not in self.coins_bought:
+            position = self.db_interface.get_position_details(symbol)
+            if not position:
                 logger.warning(f"⚠️ No position found for {symbol}")
                 return {"success": False, "reason": "No position found"}
 
-            position = self.coins_bought[symbol]
-            volume = position["volume"]
-            bought_at = position["bought_at"]
+            volume = float(position.get("volume", 0))
+            bought_at = float(position.get("bought_at", 0))
 
-            # Execute order
             if self.TEST_MODE:
                 order_data = self._create_mock_sell_order(symbol, volume)
             else:
                 order_data = self._execute_real_sell_order(symbol, volume)
 
-            # Calculate sell price and profit with fees
             sell_price = float(order_data.get("avgPrice", 0))
-            volume = float(order_data.get("volume", 0))
             if sell_price <= 0:
                 logger.error(f"💥 Invalid sell price for {symbol}: {sell_price}")
                 return {"success": False, "reason": "Invalid sell price"}
@@ -211,8 +197,7 @@ class PortfolioManager:
             # Close position in database
             self.db_interface.close_position(symbol, sell_price, reason)
 
-            # Remove from local cache
-            del self.coins_bought[symbol]
+            # Update JSON backup
             self.save_current_state()
 
             logger.info(
@@ -251,15 +236,14 @@ class PortfolioManager:
             ttp_percent = self.TRAILING_TAKE_PROFIT / 100
             trading_fee = self.config.get("TRADING_FEE", 0.1) / 100
             trailing_threshold = self.config.get("TRAILING_THRESHOLD", 0.8)
-            tpsl_override = self.config.get("SESSION_TPSL_OVERRIDE", False)
-
-            base_tp_perc = self.TAKE_PROFIT
             trailing_tp_bonus = self.TRAILING_TAKE_PROFIT
             trailing_sl_distance = self.TRAILING_STOP_LOSS
 
-            for symbol, position in list(self.coins_bought.items()):
+            positions = self.db_interface.get_open_positions()
+            for symbol, position in list(positions.items()):
                 current_price = current_prices.get(symbol, 0)
                 if current_price <= 0:
+                    logger.warning(f"⚠️ Invalid price for {symbol}: {current_price}")
                     continue
 
                 self.db_interface.update_position_price_and_profit_loss(
@@ -269,20 +253,17 @@ class PortfolioManager:
                 )
 
                 position_data = self.db_interface.get_position_details(symbol)
-
-                entry_price = float(position.get("bought_at", 0))
+                entry_price = float(position_data.get("bought_at", 0))
                 if entry_price <= 0:
                     logger.warning(
                         f"Invalid bought_at price for {symbol}, skipping update"
                     )
                     continue
 
-                tp_perc = float(position_data.get("tp_perc", base_tp_perc))
-                sl_perc = float(position_data.get("sl_perc", self.STOP_LOSS))
+                tp_perc = float(position_data.get("tp_perc", self.TAKE_PROFIT))
 
                 buy_fee = entry_price * trading_fee
                 sell_fee = current_price * trading_fee
-
                 price_after_fees = current_price - sell_fee
                 entry_price_plus_fees = entry_price + buy_fee
 
@@ -296,36 +277,34 @@ class PortfolioManager:
                     (price_after_fees - entry_price_plus_fees) / entry_price_plus_fees
                 ) * 100
 
-                base_tp_price = entry_price_plus_fees * (1 + base_tp_perc / 100)
+                base_tp_price = entry_price_plus_fees * (1 + self.TAKE_PROFIT / 100)
                 base_sl_price = entry_price_plus_fees * (1 - self.STOP_LOSS / 100)
 
                 position_ttp_tsl_active = position_data.get("TTP_TSL", False)
 
-                if tsl_enabled and not tpsl_override:
+                if tsl_enabled and not self.config.get("SESSION_TPSL_OVERRIDE", False):
                     if not position_ttp_tsl_active:
                         if price_after_fees >= base_tp_price:
-                            position["TTP_TSL"] = True
+                            # Activate trailing stop-loss and store max_price in database
                             self.db_interface.update_transaction_record(
-                                symbol, {"TTP_TSL": True}
+                                symbol, {"TTP_TSL": True, "max_price": current_price}
                             )
-                            position["max_price"] = current_price
-                            position["min_sl_price"] = current_price * (1 - tsl_percent)
+                            min_sl_price = current_price * (1 - tsl_percent)
 
-                            new_tp_perc = base_tp_perc + trailing_tp_bonus
+                            new_tp_perc = self.TAKE_PROFIT + trailing_tp_bonus
                             new_sl_perc = new_tp_perc - trailing_sl_distance
 
-                            position["tp_perc"] = new_tp_perc
-                            position["sl_perc"] = new_sl_perc
-
-                            self.update_tp_in_db(symbol, new_tp_perc)
-                            self.update_tp_in_memory_and_json(symbol, new_tp_perc)
-                            self.update_sl_in_db(symbol, new_sl_perc)
-                            self.update_sl_in_memory_and_json(symbol, new_sl_perc)
+                            self.db_interface.update_position_tp(symbol, new_tp_perc)
+                            self.db_interface.update_position_sl(symbol, new_sl_perc)
+                            self.db_interface.update_transaction_record(
+                                symbol, {"min_sl_price": min_sl_price}
+                            )
 
                             logger.info(
                                 f"⚡ Trailing activated for {symbol} (price reached base TP). "
                                 f"Set TP: {new_tp_perc:.4f}%, SL: {new_sl_perc:.4f}%"
                             )
+                            self.save_current_state()
                             continue
                         else:
                             if price_after_fees <= base_sl_price:
@@ -336,36 +315,32 @@ class PortfolioManager:
                                     symbol, "Price reached base SL before trailing"
                                 )
                                 continue
-
                     else:
-                        max_price = position.get("max_price", current_price)
-                        min_sl_price = position.get(
+                        max_price = position_data.get("max_price", current_price)
+                        min_sl_price = position_data.get(
                             "min_sl_price", max_price * (1 - tsl_percent)
                         )
 
                         if current_price > max_price:
                             max_price = current_price
-                            position["max_price"] = max_price
+                            self.db_interface.update_transaction_record(
+                                symbol, {"max_price": max_price}
+                            )
 
                             trailing_sl_price = max_price * (1 - tsl_percent)
                             if trailing_sl_price > min_sl_price:
                                 min_sl_price = trailing_sl_price
-                                position["min_sl_price"] = min_sl_price
-                                self.db_interface.update_position_sl(
-                                    symbol, min_sl_price
+                                self.db_interface.update_transaction_record(
+                                    symbol, {"min_sl_price": min_sl_price}
                                 )
-
                                 new_sl_perc = (
                                     (entry_price - min_sl_price) / entry_price
                                 ) * 100
                                 if new_sl_perc < 0:
                                     new_sl_perc = trailing_sl_distance
-                                if abs(new_sl_perc - sl_perc) > 1e-5:
-                                    position["sl_perc"] = new_sl_perc
-                                    self.update_sl_in_db(symbol, new_sl_perc)
-                                    self.update_sl_in_memory_and_json(
-                                        symbol, new_sl_perc
-                                    )
+                                self.db_interface.update_position_sl(
+                                    symbol, new_sl_perc
+                                )
 
                         trailing_tp_price = max_price * (1 + ttp_percent)
 
@@ -374,7 +349,8 @@ class PortfolioManager:
                             new_sl_perc = new_tp_perc - trailing_sl_distance
                         else:
                             new_sl_perc = (
-                                position.get("tp_perc", tp_perc) - trailing_sl_distance
+                                position_data.get("tp_perc", tp_perc)
+                                - trailing_sl_distance
                             )
                             new_tp_perc = price_change_inc_fees_perc + trailing_tp_bonus
 
@@ -382,12 +358,10 @@ class PortfolioManager:
                             new_sl_perc = new_tp_perc * 0.25
 
                         if abs(new_tp_perc - tp_perc) > 0.001:
-                            position["tp_perc"] = new_tp_perc
-                            self.update_tp_in_db(symbol, new_tp_perc)
-                            self.update_tp_in_memory_and_json(symbol, new_tp_perc)
-                            position["sl_perc"] = new_sl_perc
-                            self.update_sl_in_db(symbol, new_sl_perc)
-                            self.update_sl_in_memory_and_json(symbol, new_sl_perc)
+                            self.db_interface.update_position_tp(symbol, new_tp_perc)
+                            self.db_interface.update_position_sl(symbol, new_sl_perc)
+
+                        self.save_current_state()
 
                         if price_after_fees >= trailing_tp_price:
                             logger.info(
@@ -411,7 +385,6 @@ class PortfolioManager:
                                 symbol, reason="Static Stop Loss during trailing"
                             )
                             continue
-
                 else:
                     if price_after_fees >= base_tp_price:
                         logger.info(
@@ -433,59 +406,21 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"💥 Error updating open positions details: {e}")
 
-    def update_tp_in_memory_and_json(self, symbol, new_tp):
-        """
-        Update TP for a single symbol in coins_bought and save to JSON file.
-        """
-        import json
-
-        if symbol in self.coins_bought:
-            self.coins_bought[symbol]["tp_perc"] = new_tp
-            try:
-                with open(self.coins_bought_file_path, "w") as f:
-                    json.dump(self.coins_bought, f, indent=4)
-            except Exception as e:
-                logger.error(
-                    f"[ERROR] Failed to save coins_bought after TP update: {e}"
-                )
-            return True
-        return False
-
     def update_tp_in_db(self, symbol, new_tp):
-        """
-        Update TP for an open position in the database.
-        """
+        """Update TP for an open position in the database and JSON."""
         try:
             self.db_interface.update_position_tp(symbol, new_tp)
+            self.save_current_state()
             return True
         except Exception as e:
             logger.error(f"[ERROR] Failed to update TP in DB for {symbol}: {e}")
             return False
 
-    def update_sl_in_memory_and_json(self, symbol, new_sl):
-        """
-        Update SL for a single symbol in coins_bought and save to JSON file.
-        """
-        import json
-
-        if symbol in self.coins_bought:
-            self.coins_bought[symbol]["sl_perc"] = new_sl
-            try:
-                with open(self.coins_bought_file_path, "w") as f:
-                    json.dump(self.coins_bought, f, indent=4)
-            except Exception as e:
-                logger.error(
-                    f"[ERROR] Failed to save coins_bought after SL update: {e}"
-                )
-            return True
-        return False
-
     def update_sl_in_db(self, symbol, new_sl):
-        """
-        Update SL for an open position in the database.
-        """
+        """Update SL for an open position in the database and JSON."""
         try:
             self.db_interface.update_position_sl(symbol, new_sl)
+            self.save_current_state()
             return True
         except Exception as e:
             logger.error(f"[ERROR] Failed to update SL in DB for {symbol}: {e}")
@@ -518,23 +453,20 @@ class PortfolioManager:
     def sell_all_positions(self, reason: str):
         """Sell all open positions."""
         try:
-            if not self.coins_bought:
+            positions = self.db_interface.get_open_positions()
+            if not positions:
                 logger.info("💼 No open positions to sell")
                 return
 
-            positions_to_sell = list(self.coins_bought.keys())
-            logger.info(f"🔴 Selling {len(positions_to_sell)} positions: {reason}")
-            logger.info(f"🔴 Positions to sell: {positions_to_sell}")
-
+            logger.info(f"🔴 Selling {len(positions)} positions: {reason}")
             successful_sells = 0
             failed_sells = 0
 
-            for symbol in positions_to_sell:
+            for symbol in list(positions.keys()):
                 try:
                     self.execute_sell(symbol, reason)
                     successful_sells += 1
                     logger.info(f"🔴 Successfully sold {symbol}")
-
                 except Exception as e:
                     failed_sells += 1
                     logger.error(f"💥 Failed to sell {symbol}: {e}")
@@ -543,8 +475,6 @@ class PortfolioManager:
             logger.info(
                 f"🔴 Sell all completed - Success: {successful_sells}, Failed: {failed_sells}"
             )
-
-            # Save state after selling all
             self.save_current_state()
 
         except Exception as e:
@@ -552,60 +482,40 @@ class PortfolioManager:
             raise
 
     def close_all_positions_emergency(self, reason: str = "Emergency close"):
-        """
-        Emergency close all positions (alternative method).
-
-        Args:
-            reason: Reason for emergency close
-        """
+        """Emergency close all positions."""
         try:
             logger.warning(f"🚨 Emergency closing all positions: {reason}")
+            positions = self.db_interface.get_open_positions()
 
-            # Get all open positions from database
-            open_positions = self.db_interface.get_open_positions()
-
-            for symbol, position in open_positions.items():
+            for symbol in positions.keys():
                 try:
-                    # Close position in database
                     current_price = self._get_symbol_price(symbol)
                     if current_price:
                         self.db_interface.close_position(symbol, current_price, reason)
                         logger.info(f"🚨 Emergency closed {symbol} in database")
-
                 except Exception as e:
                     logger.error(f"💥 Failed to emergency close {symbol}: {e}")
                     continue
 
-            # Clear local positions
-            self.coins_bought.clear()
             self.save_current_state()
-
             logger.warning("🚨 Emergency close completed")
 
         except Exception as e:
             logger.error(f"💥 Error in emergency close: {e}")
 
     def get_portfolio_summary(self) -> Dict[str, Any]:
-        """
-        Get comprehensive portfolio summary.
-
-        Returns:
-            Dict with portfolio summary
-        """
+        """Get comprehensive portfolio summary."""
         try:
-            # Use database statistics
             db_stats = self.db_interface.get_portfolio_statistics()
-
-            # Calculate current values
+            positions = self.db_interface.get_open_positions()
             current_prices = self._get_current_prices()
             total_current_value = 0.0
             total_invested = 0.0
 
-            for symbol, position in self.coins_bought.items():
+            for symbol, position in positions.items():
                 volume = float(position.get("volume", 0))
                 bought_at = float(position.get("bought_at", 0))
                 current_price = current_prices.get(symbol, bought_at)
-
                 total_invested += volume * bought_at
                 total_current_value += volume * current_price
 
@@ -615,13 +525,13 @@ class PortfolioManager:
             )
 
             return {
-                "active_positions": len(self.coins_bought),
+                "active_positions": len(positions),
                 "total_invested": total_invested,
                 "total_current_value": total_current_value,
                 "unrealized_pnl": unrealized_pnl,
                 "unrealized_pnl_pct": unrealized_pnl_pct,
                 "available_slots": (
-                    max(0, self.TRADE_SLOTS - len(self.coins_bought))
+                    max(0, self.TRADE_SLOTS - len(positions))
                     if self.TRADE_SLOTS > 0
                     else float("inf")
                 ),
@@ -629,7 +539,6 @@ class PortfolioManager:
                 "win_rate": db_stats.get("win_rate", 0),
                 "total_realized_pnl": db_stats.get("total_realized_pnl", 0),
             }
-
         except Exception as e:
             logger.error(f"💥 Error getting portfolio summary: {e}")
             return {
@@ -643,15 +552,15 @@ class PortfolioManager:
 
     def get_positions_count(self) -> int:
         """Get number of open positions."""
-        return len(self.coins_bought)
+        return len(self.db_interface.get_open_positions())
 
     def has_open_positions(self) -> bool:
         """Check if there are any open positions."""
-        return len(self.coins_bought) > 0
+        return len(self.db_interface.get_open_positions()) > 0
 
     def get_positions_list(self) -> list:
         """Get list of symbols with open positions."""
-        return list(self.coins_bought.keys())
+        return list(self.db_interface.get_open_positions().keys())
 
     def _get_symbol_price(self, symbol: str) -> float:
         """Get symbol price from data provider cache."""
@@ -666,8 +575,6 @@ class PortfolioManager:
         symbol: str,
         volume: float,
         price: float,
-        side: str,
-        order_type: str = "MARKET",
     ) -> Dict[str, Any]:
         """
         Create mock order for test mode.
@@ -676,8 +583,6 @@ class PortfolioManager:
             symbol: Trading pair symbol
             volume: Quantity to buy/sell
             price: Price per unit
-            side: "BUY" or "SELL"
-            order_type: Order type, default "MARKET"
 
         Returns:
             Dict: Mock order data
@@ -702,11 +607,11 @@ class PortfolioManager:
     def _create_mock_buy_order(
         self, symbol: str, volume: float, price: float
     ) -> Dict[str, Any]:
-        return self._create_mock_order(symbol, volume, price, side="BUY")
+        return self._create_mock_order(symbol, volume, price)
 
     def _create_mock_sell_order(self, symbol: str, volume: float) -> Dict[str, Any]:
         current_price = self._get_symbol_price(symbol)
-        return self._create_mock_order(symbol, volume, current_price, side="SELL")
+        return self._create_mock_order(symbol, volume, current_price)
 
     def _execute_real_buy_order(self, symbol: str, volume: float) -> Dict[str, Any]:
         """
@@ -807,29 +712,37 @@ class PortfolioManager:
         }
 
     @staticmethod
-    def truncate(number, decimals=0):
+    def truncate(number: float, decimals: int = 0) -> float:
         """
         Returns value truncated to a specific number of decimal places.
         Better than rounding.
-        """
-        if not isinstance(decimals, int):
-            raise TypeError("decimal places must be an integer.")
-        elif decimals < 0:
-            raise ValueError("decimal places has to be 0 or more.")
-        elif decimals == 0:
-            return math.trunc(number)
 
+        Args:
+            number: The number to truncate.
+            decimals: Number of decimal places (default 0).
+
+        Returns:
+            Truncated number as a float.
+
+        Raises:
+            TypeError: If decimals is not an integer.
+            ValueError: If decimals is negative.
+        """
+        if decimals < 0:
+            raise ValueError("decimal places has to be 0 or more.")
+        if decimals == 0:
+            return float(math.trunc(number))
         factor = 10.0**decimals
         return math.trunc(number * factor) / factor
 
     def save_current_state(self):
-        """Save current portfolio state to file."""
-
+        """Save current portfolio state from database to JSON file."""
         try:
+            positions = self.db_interface.get_open_positions()
             backup_data = {
-                "positions": self.coins_bought,
+                "positions": positions,
                 "last_updated": datetime.now().isoformat(),
-                "total_positions": len(self.coins_bought),
+                "total_positions": len(positions),
                 "metadata": {
                     "trade_total": self.TRADE_TOTAL,
                     "trade_slots": self.TRADE_SLOTS,

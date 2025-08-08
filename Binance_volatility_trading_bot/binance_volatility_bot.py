@@ -5,7 +5,6 @@ from pathlib import Path
 from datetime import datetime
 
 # Third-party imports
-import yaml
 from colorama import init, Fore, Style
 from loguru import logger
 
@@ -445,7 +444,7 @@ class BinanceVolatilityBot:
             # Initialize session statistics
             self.reporting_manager.initialize_session_stats()
 
-            logger.success(f"✅ All components initialized successfully")
+            logger.success("✅ All components initialized successfully")
 
         except Exception as e:
             logger.exception(f"💥 Component initialization failed: {e}")

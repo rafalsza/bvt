@@ -7,6 +7,25 @@ from typing import Dict, Any, List
 from loguru import logger
 
 
+def run_signal_module_process(module_name: str):
+    """Run a signal module in a separate process."""
+
+    try:
+        logger.info(f"📡 Signal module {module_name} process started")
+
+        module = importlib.import_module(module_name)
+
+        if hasattr(module, "do_work"):
+            module.do_work()
+        else:
+            logger.warning(f"⚠️ Module {module_name} has no do_work function")
+
+    except Exception as e:
+        logger.error(f"💥 Error in signal module {module_name}: {e}")
+    finally:
+        logger.info(f"📡 Signal module {module_name} process ended")
+
+
 class ExternalSignalManager:
     """Manages external signal modules using multiprocessing."""
 
@@ -28,8 +47,8 @@ class ExternalSignalManager:
             for module_name in self.signalling_modules:
                 try:
                     process = mp.Process(
-                        target=self._run_signal_module,
-                        args=(module_name, self.signal_queue, self.stop_event),
+                        target=run_signal_module_process,
+                        args=(module_name,),
                     )
                     process.start()
                     self.signal_processes[module_name] = process
@@ -40,28 +59,6 @@ class ExternalSignalManager:
 
         except Exception as e:
             logger.error(f"💥 Error starting signal modules: {e}")
-
-    def _run_signal_module(
-        self, module_name: str, signal_queue: mp.Queue, stop_event: mp.Event
-    ):
-        """Run a signal module in a separate process."""
-        try:
-            logger.info(f"📡 Signal module {module_name} process started")
-
-            # Import the signal module
-            module = importlib.import_module(module_name)
-
-            # Check if module has do_work function
-            if hasattr(module, "do_work"):
-                # Run the module's main function
-                module.do_work()
-            else:
-                logger.warning(f"⚠️ Module {module_name} has no do_work function")
-
-        except Exception as e:
-            logger.error(f"💥 Error in signal module {module_name}: {e}")
-        finally:
-            logger.info(f"📡 Signal module {module_name} process ended")
 
     def get_external_signals(self) -> Dict[str, Any]:
         """Get signals from external signal files."""

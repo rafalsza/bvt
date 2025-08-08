@@ -19,7 +19,7 @@ script_options:
   MSG_TELEGRAM: true
   TEST_MODE: true
 trading_options:
-  CHANGE_IN_PRICE: 1
+  CHANGE_IN_PRICE: 2.5
   COINS_MAX_VOLUME: 5000000000
   COINS_MIN_VOLUME: 100000000
   COOLOFF_MULTIPLIER_LOSS: 2
@@ -82,8 +82,8 @@ trading_options:
   SIGNALLING_MODULES:
   - import_binance_tickers_coingecko
   - rs_wavetrend
-  STOP_LOSS: 10
-  TAKE_PROFIT: 2.0
+  STOP_LOSS: 5
+  TAKE_PROFIT: 3.0
   TICKERS_LIST: tickerlists/tickers_all.txt
   TIME_DIFFERENCE: 1
   TRADE_SLOTS: 10

@@ -335,7 +335,10 @@ class NotificationManager:
                 bought_at = float(pos.get("bought_at", 0))
                 now_at = float(pos.get("now_at", 0))
                 tp_pct = float(pos.get("tp_perc", 0))
-                sl_pct = float(pos.get("sl_perc", 0))
+                if not pos.get("TTP_TSL"):
+                    sl_pct = -float(pos.get("sl_perc", 0))
+                else:
+                    sl_pct = float(pos.get("sl_perc", 0))
                 change_pct = float(pos.get("change_perc", 0))
                 profit_dollars = float(pos.get("profit_dollars", 0))
                 time_held = self.calculate_time_held(pos)
@@ -782,7 +785,7 @@ class NotificationManager:
             # Check if the bot currently holds this coin
             if (
                 not self.portfolio_manager
-                or symbol not in self.portfolio_manager.coins_bought
+                or symbol not in self.portfolio_manager.get_positions_list()
             ):
                 self.bot.reply_to(message, f"❌ No open position for {symbol}.")
                 return
@@ -865,13 +868,12 @@ class NotificationManager:
             # Check if the bot currently holds this coin
             if (
                 not self.portfolio_manager
-                or symbol not in self.portfolio_manager.coins_bought
+                or symbol not in self.portfolio_manager.get_positions_list()
             ):
                 self.bot.reply_to(message, f"❌ No open position for {symbol}.")
                 return
 
             # Update TP in the position
-            self.portfolio_manager.update_tp_in_memory_and_json(symbol, new_tp)
             self.portfolio_manager.update_tp_in_db(symbol, new_tp)
 
             # If you want to persist this change, also update in DB if needed:
@@ -943,34 +945,33 @@ class NotificationManager:
 
             symbol = parts[1].upper()
             try:
-                new_tp = float(parts[2])
+                new_sl = float(parts[2])
             except ValueError:
-                self.bot.reply_to(message, "❌ SL% must be a number (e.g. 15 for 15%).")
+                self.bot.reply_to(message, "❌ SL% must be a number (e.g. 10 for 10%).")
                 return
 
             # Check if the bot currently holds this coin
             if (
                 not self.portfolio_manager
-                or symbol not in self.portfolio_manager.coins_bought
+                or symbol not in self.portfolio_manager.get_positions_list()
             ):
                 self.bot.reply_to(message, f"❌ No open position for {symbol}.")
                 return
 
-            # Update TP in the position
-            self.portfolio_manager.update_sl_in_memory_and_json(symbol, new_tp)
-            self.portfolio_manager.update_sl_in_db(symbol, new_tp)
+            # Update SL in the position
+            self.portfolio_manager.update_sl_in_db(symbol, new_sl)
 
-            # If you want to persist this change, also update in DB if needed:
+            # Persist change to database
             if hasattr(self.portfolio_manager, "save_current_state"):
                 self.portfolio_manager.save_current_state()
 
             self.bot.reply_to(
-                message, f"✅ Stop Loss for {symbol} updated to {new_tp:.2f}%"
+                message, f"✅ Stop Loss for {symbol} updated to {new_sl:.2f}%"
             )
-            logger.info(f"🟢 SL for {symbol} changed to {new_tp:.2f}% via Telegram")
+            logger.info(f"🟢 SL for {symbol} changed to {new_sl:.2f}% via Telegram")
 
         except Exception as e:
-            logger.error(f"💥 Error handling changetp command: {e}")
+            logger.error(f"💥 Error handling changesl command: {e}")
             self.bot.reply_to(message, f"❌ Error changing SL: {str(e)}")
 
     def _get_uptime(self) -> str:

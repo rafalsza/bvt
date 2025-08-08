@@ -12,10 +12,8 @@ class DbInterface:
         # Configure SQLite with explicit dialect and connection parameters
         self.engine = db.create_engine(
             f"sqlite:///{db_path}",
-            connect_args={
-                "check_same_thread": False
-            },  # Required for SQLite in multi-threaded apps
-            echo=False,  # Set to True for SQL query logging
+            connect_args={"check_same_thread": False},
+            echo=False,
         )
         self.connection = self.engine.connect()
         self.metadata = db.MetaData()
@@ -114,6 +112,7 @@ class DbInterface:
                 transactions.c.buy_signal,
                 transactions.c.tp_perc,
                 transactions.c.sl_perc,
+                transactions.c.TTP_TSL,
             ]
 
             query = db.select(*columns).where(transactions.c.closed.is_(False))
@@ -156,6 +155,7 @@ class DbInterface:
                     "signal": row.buy_signal or "unknown",
                     "tp_perc": float(row.tp_perc),
                     "sl_perc": float(row.sl_perc),
+                    "TTP_TSL": bool(row.TTP_TSL),
                 }
 
             logger.debug(f"💼 Retrieved {len(positions)} complete open positions")

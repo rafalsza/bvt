@@ -1,6 +1,4 @@
 # data_provider.py
-import numpy as np
-import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from loguru import logger
@@ -246,10 +244,14 @@ class DataProvider:
                     price_change = self._calculate_price_change(symbol)
 
                     # Check if change exceeds threshold
-                    change_threshold = self.config.get("CHANGE_IN_PRICE", 5)
-                    if price_change > change_threshold:
+                    change_threshold = self.config.get("CHANGE_IN_PRICE", 3)
+                    if abs(price_change) > change_threshold:
                         volatile_coins[symbol] = {
-                            "buy_signal": "volatility_gain",
+                            "buy_signal": (
+                                "volatility_gain"
+                                if price_change > 0
+                                else "volatility_drop"
+                            ),
                             "value": 1,
                             "gain": round(price_change, 3),
                         }

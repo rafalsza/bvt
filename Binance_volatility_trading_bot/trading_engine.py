@@ -2,6 +2,7 @@
 from typing import Dict, Any
 from loguru import logger
 from datetime import datetime
+from time import sleep
 
 
 class TradingEngine:
@@ -16,6 +17,7 @@ class TradingEngine:
         self.risk_manager = risk_manager
         self.portfolio_manager = portfolio_manager
         self.is_running = True
+        self._backoff_attempts = 0
 
         logger.info("🏭 Trading engine initialized")
 
@@ -57,6 +59,9 @@ class TradingEngine:
             validated_signals: Dictionary of validated trading signals
         """
         try:
+            open_positions = self.portfolio_manager.get_positions_list()
+            portfolio_summary = self.portfolio_manager.get_portfolio_summary()
+            trade_delay = self.config.get("TRADE_DELAY_MS", 100) / 1000
             for symbol, signal in validated_signals.items():
                 try:
                     # Add symbol to signal data
@@ -64,9 +69,14 @@ class TradingEngine:
 
                     # Determine action based on signal type
                     action = self._determine_action(signal)
+                    logger.debug(
+                        f"⚙️ Action determined: {action} for {signal.get('symbol')}"
+                    )
 
                     # Check if trade should be executed based on portfolio status
-                    if not self._should_execute_trade():
+                    if not self._should_execute_trade(
+                        signal, open_positions, portfolio_summary
+                    ):
                         logger.warning(
                             f"⏸️  Trade execution blocked for {symbol} - portfolio conditions not met"
                         )
@@ -78,6 +88,8 @@ class TradingEngine:
                         self._execute_sell_signal(symbol, signal)
                     else:
                         logger.warning(f"⚠️ Unknown action for {symbol}: {action}")
+                    sleep(trade_delay)
+                    self._reset_backoff_attempts()
 
                 except Exception as e:
                     logger.error(f"💥 Failed to execute signal for {symbol}: {e}")
@@ -85,6 +97,10 @@ class TradingEngine:
 
         except Exception as e:
             logger.error(f"💥 Error executing validated signals: {e}")
+
+    def _reset_backoff_attempts(self):
+        """Reset backoff attempts after successful cycle."""
+        self._backoff_attempts = 0
 
     def _determine_action(self, signal: Dict[str, Any]) -> str:
         """
@@ -96,21 +112,22 @@ class TradingEngine:
         Returns:
             str: Trading action ('BUY', 'SELL', or 'UNKNOWN')
         """
-        # Check if action is explicitly defined
         if "action" in signal:
             return signal["action"].upper()
 
-        # Check for buy signal indicators
-        if signal.get("buy_signal"):
-            return "BUY"
+        buy_signal = signal.get("buy_signal")
+        sell_signal = signal.get("sell_signal")
 
-        # Check for sell signal indicators
-        if signal.get("sell_signal"):
+        if buy_signal and sell_signal:
+            logger.warning(
+                f"⚠️ Conflicting signals for {signal.get('symbol', 'unknown')}: buy={buy_signal}, sell={sell_signal}"
+            )
+            return "UNKNOWN"
+
+        if buy_signal:
+            return "BUY"
+        if sell_signal:
             return "SELL"
-
-        # Default to BUY for volatility signals (most common case)
-        if signal.get("buy_signal") or signal.get("gain"):
-            return "BUY"
 
         logger.warning(f"⚠️ Could not determine action from signal: {signal}")
         return "UNKNOWN"
@@ -125,8 +142,7 @@ class TradingEngine:
         """
         try:
             # Check if we already have this position
-            current_positions = self.portfolio_manager.coins_bought
-            if symbol in current_positions:
+            if symbol in self.portfolio_manager.get_positions_list():
                 logger.warning(f"⚠️ Already have position in {symbol}, skipping buy")
                 return
 
@@ -147,8 +163,7 @@ class TradingEngine:
         """Execute sell order with result tracking."""
         try:
             # Check if we have this position
-            current_positions = self.portfolio_manager.coins_bought
-            if symbol not in current_positions:
+            if symbol not in self.portfolio_manager.get_positions_list():
                 logger.warning(f"⚠️ No position found for {symbol}, skipping sell")
                 return
 
@@ -263,19 +278,39 @@ class TradingEngine:
         except Exception as e:
             logger.error(f"💥 Error force selling all positions: {e}")
 
-    def _should_execute_trade(self) -> bool:
-        """Check if trade should be executed based on portfolio status."""
-        try:
-            portfolio_summary = self.portfolio_manager.get_portfolio_summary()
+    def _should_execute_trade(
+        self,
+        signal: Dict[str, Any],
+        open_positions: list,
+        portfolio_summary: dict[str, Any],
+    ) -> bool:
+        """
+        Check if trade should be executed based on portfolio status and signal type.
 
-            # Check available slots
+        Args:
+            signal: Trading signal data
+            open_positions: List of symbols with open positions
+            portfolio_summary: Portfolio summary data
+
+        Returns:
+            bool: Whether the trade should be executed
+        """
+        try:
+            action = self._determine_action(signal)
+
+            if action == "SELL":
+                symbol = signal.get("symbol")
+                if symbol not in open_positions:
+                    logger.warning(f"⚠️ No open position for {symbol}, skipping sell")
+                    return False
+                return True
+
             if portfolio_summary["available_slots"] <= 0:
                 logger.warning(
                     f"⚠️ No available trade slots ({portfolio_summary['active_positions']}/{self.config.get('TRADE_SLOTS')})"
                 )
                 return False
 
-            # Check portfolio exposure
             max_exposure = self.config.get("MAX_PORTFOLIO_EXPOSURE", 10000)
             if portfolio_summary["total_current_value"] >= max_exposure:
                 logger.warning(
@@ -283,10 +318,7 @@ class TradingEngine:
                 )
                 return False
 
-            # Check unrealized P&L
-            if (
-                portfolio_summary["unrealized_pnl_pct"] < -20
-            ):  # Stop trading if down 20%
+            if portfolio_summary["unrealized_pnl_pct"] < -20:
                 logger.warning(
                     f"⚠️ Portfolio down {portfolio_summary['unrealized_pnl_pct']:.2f}% - pausing trades"
                 )
