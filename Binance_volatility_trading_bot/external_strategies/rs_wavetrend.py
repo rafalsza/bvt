@@ -5,8 +5,9 @@ import threading
 import os
 import warnings
 import time
+from numpy.typing import NDArray
 from loguru import logger
-from w_params import wavetrend_parameters
+from .w_params import wavetrend_parameters
 from typing import Optional
 import signal
 
@@ -67,7 +68,7 @@ class TechnicalIndicators:
     """Technical analysis indicators implemented with numpy."""
 
     @staticmethod
-    def ema(data: np.array, period: int) -> np.array:
+    def ema(data: NDArray, period: int) -> NDArray:
         alpha = 2.0 / (period + 1.0)
         ema_values = np.zeros_like(data)
         ema_values[0] = data[0]
@@ -78,7 +79,7 @@ class TechnicalIndicators:
         return ema_values
 
     @staticmethod
-    def sma(data: np.array, period: int) -> np.array:
+    def sma(data: NDArray, period: int) -> NDArray:
         sma_values = np.full(len(data), np.nan)
 
         for i in range(period - 1, len(data)):
@@ -87,12 +88,12 @@ class TechnicalIndicators:
         return sma_values
 
     @staticmethod
-    def hlc3(high: np.array, low: np.array, close: np.array) -> np.array:
+    def hlc3(high: NDArray, low: NDArray, close: NDArray) -> NDArray:
         """Calculate HLC3 (typical price)."""
         return (high + low + close) / 3.0
 
     @staticmethod
-    def cmo(data: np.array, period: int = 14) -> np.array:
+    def cmo(data: NDArray, period: int = 14) -> NDArray:
         """
         Calculate Chande Momentum Oscillator.
 
@@ -113,8 +114,8 @@ class TechnicalIndicators:
         cmo_values = np.full(len(data), np.nan)
 
         for i in range(period, len(data)):
-            sum_gains = np.sum(gains[i - period : i])
-            sum_losses = np.sum(losses[i - period : i])
+            sum_gains = float(np.sum(gains[i - period : i]))
+            sum_losses = float(np.sum(losses[i - period : i]))
 
             if sum_gains + sum_losses != 0:
                 cmo_values[i] = (
@@ -178,7 +179,7 @@ class WaveTrendAnalyzer:
         self.data_provider = DataProvider()
 
     def calculate_wavetrend(
-        self, high: np.array, low: np.array, close: np.array, n1: int = 10, n2: int = 21
+        self, high: NDArray, low: NDArray, close: NDArray, n1: int = 10, n2: int = 21
     ) -> tuple:
         try:
             ap = self.indicators.hlc3(high, low, close)
@@ -241,8 +242,8 @@ class SignalGenerator:
 
     def _check_buy_conditions(
         self,
-        wt1: np.array,
-        ema_200: np.array,
+        wt1: NDArray,
+        ema_200: NDArray,
         data: dict,
         symbol: str,
     ) -> bool:
@@ -265,14 +266,14 @@ class SignalGenerator:
             logger.error(f"Error checking buy conditions for {symbol}: {e}")
             return False
 
-    def _check_sell_conditions(self, wt1: np.array, symbol: str) -> bool:
+    def _check_sell_conditions(self, wt1: NDArray, symbol: str) -> bool:
         """Check sell conditions"""
         try:
             if len(wt1) == 0:
                 return False
 
             # Basic WaveTrend overbought condition
-            sell_signal = wt1[-1] > SignalConfig.WT_OVERBOUGHT_THRESHOLD
+            sell_signal = bool(wt1[-1] > SignalConfig.WT_OVERBOUGHT_THRESHOLD)
 
             if sell_signal:
                 logger.debug(f"🔴 Sell signal for {symbol}: WT1={wt1[-1]:.2f}")
@@ -423,8 +424,8 @@ class SignalFileManager:
         if signals:
             os.makedirs(os.path.dirname(SIGNAL_FILE_BUY), exist_ok=True)
             with open(SIGNAL_FILE_BUY, "a+") as f:
-                for signal in signals:
-                    f.write(f"{signal}\n")
+                for sig in signals:
+                    f.write(f"{sig}\n")
 
     @staticmethod
     def write_sell_signals(signals: list):
@@ -432,8 +433,8 @@ class SignalFileManager:
         if signals:
             os.makedirs(os.path.dirname(SIGNAL_FILE_SELL), exist_ok=True)
             with open(SIGNAL_FILE_SELL, "a+") as f:
-                for signal in signals:
-                    f.write(f"{signal}\n")
+                for sig in signals:
+                    f.write(f"{sig}\n")
 
 
 def analyze_trading_pairs(trading_pairs: list) -> tuple:

@@ -7,10 +7,13 @@ from loguru import logger
 class RiskManager:
     """Manages risk parameters and session limits for trading operations."""
 
-    def __init__(self, config: Dict[str, Any], portfolio_manager=None):
+    def __init__(
+        self, config: Dict[str, Any], portfolio_manager=None, data_provider=None
+    ):
         """Initialize risk manager with configuration."""
         self.config = config
         self.portfolio_manager = portfolio_manager
+        self.data_provider = data_provider
         self.session_profit = 0
         self.session_loss = 0
 
@@ -94,6 +97,7 @@ class RiskManager:
             self._check_position_size_limit(coin, portfolio_summary),
             self._check_cooloff_period(coin),
             self._check_session_limits(),
+            self.check_delisting(coin),
         ]
 
         if not is_sell:
@@ -262,6 +266,24 @@ class RiskManager:
         except Exception as e:
             logger.error(f"💥 Error checking trade slots: {e}")
             return False
+
+    def check_delisting(self, coin: str) -> bool:
+        """
+        Check if a coin is scheduled for delisting.
+
+        Args:
+            coin (str): The trading pair symbol to check
+
+        Returns:
+            bool: True if the coin is scheduled for delisting, False otherwise
+        """
+        delisted_coins = self.data_provider.get_delisted_coins()
+        is_delisted = coin in delisted_coins
+
+        if is_delisted:
+            logger.debug(f"⚠️ Coin {coin} is scheduled for delisting")
+
+        return not is_delisted
 
     def set_cooloff_period(self, coin: str, minutes: int = None):
         """

@@ -273,6 +273,12 @@ class NotificationManager:
             "🤖💰" if bot_profit is not None and bot_profit >= 0 else "🤖📉"
         )
 
+        is_active = (
+            not self.bot_instance.trading_paused
+            if self.bot_instance
+            else not balance_data.get("paused", False)
+        )
+
         message = (
             f"{profit_emoji} *Portfolio Update*\n\n"
             f"💼 *Current Portfolio*\n"
@@ -287,13 +293,15 @@ class NotificationManager:
             f"• Win Rate: `{win_rate:.1f}%`\n"
             f"• Best Trade: `{best_trade:.2f} {self.pair_with}`\n"
             f"• Worst Trade: `{worst_trade:.2f} {self.pair_with}`\n\n"
-            f"🤖 *Bot Profit*\n"
+            f"🤖 *Bot Stats*\n"
         )
 
         if bot_profit is not None:
             message += f"• Bot Total Profit: `{bot_profit_emoji} {bot_profit:.2f} {self.pair_with}`\n"
         else:
             message += "• Bot Total Profit: `N/A`\n"
+
+        message += f"• Bot Status: `{'🟢 ACTIVE' if is_active else '🔴 PAUSED'}`\n"
 
         return message
 

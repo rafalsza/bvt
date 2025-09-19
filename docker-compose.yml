@@ -6,8 +6,6 @@ services:
     restart: unless-stopped
     container_name: bvt_bot
     image: bvt_bot
-#    environment:
-#      - SQLALCHEMY_SILENCE_UBER_WARNING=1
     volumes:
       - "./user_data:/user_data"
     networks:
@@ -19,10 +17,8 @@ services:
     container_name: bvt_UI
     working_dir: /Binance_volatility_trading_bot/dash_UI
     command: ["python", "dash_app.py"]
-#    environment:
-#      - SQLALCHEMY_SILENCE_UBER_WARNING=1
     ports:
-      - 80:8050
+      - "80:8050"
     volumes:
       - "./Binance_volatility_trading_bot/dash_UI:/Binance_volatility_trading_bot/dash_UI"
       - "./user_data:/user_data"

@@ -81,15 +81,14 @@ trading_options:
   SESSION_TPSL_OVERRIDE: false
   SIGNALLING_MODULES:
   - import_binance_tickers_coingecko
-  - rs_wavetrend
-  STOP_LOSS: 5
-  TAKE_PROFIT: 3.0
+  - external_strategies.rs_buy_dip
+  STOP_LOSS: 5.0
+  TAKE_PROFIT: 5.0
   TICKERS_LIST: tickerlists/tickers_all.txt
   TIME_DIFFERENCE: 1
   TRADE_SLOTS: 10
   TRADE_TOTAL: 500
   TRADING_FEE: 0.075
-  TRAILING_STOP_LOSS: 3
-  TRAILING_TAKE_PROFIT: 1
-  TRAILING_THRESHOLD: 0.8
+  TRAILING_STOP_LOSS: 2.0
+  TRAILING_TAKE_PROFIT: 1.0
   USE_TRAILING_STOP_LOSS: true

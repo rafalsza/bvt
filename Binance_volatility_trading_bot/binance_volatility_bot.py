@@ -207,7 +207,9 @@ class BinanceVolatilityBot:
             logger.debug("💼 Portfolio manager initialized")
 
             # Risk management for position sizing and limits
-            self.risk_manager = RiskManager(self.config, self.portfolio_manager)
+            self.risk_manager = RiskManager(
+                self.config, self.portfolio_manager, self.data_provider
+            )
             logger.debug("⚖️ Risk manager initialized")
 
             # Reporting for performance tracking and analytics

@@ -9,7 +9,6 @@ class DbInterface:
 
     def __init__(self, db_path, config: Dict[str, Any]):
         self.config = config
-        # Configure SQLite with explicit dialect and connection parameters
         self.engine = db.create_engine(
             f"sqlite:///{db_path}",
             connect_args={"check_same_thread": False},
@@ -17,13 +16,13 @@ class DbInterface:
         )
         self.connection = self.engine.connect()
         self.metadata = db.MetaData()
-        self.metadata.reflect(self.connection)
+        self.metadata.reflect(self.engine)
         if "transactions" not in self.metadata.tables.keys():
             self.create_db()
 
     def create_db(self):
         """Create database schema."""
-        self.metadata.reflect(self.connection)
+        self.metadata.reflect(self.engine)
         self.metadata.drop_all(self.engine, tables=self.metadata.sorted_tables)
 
         db.Table(
@@ -36,6 +35,9 @@ class DbInterface:
             db.Column("volume", db.Float(), nullable=False),
             db.Column("bought_at", db.Float(), nullable=False),
             db.Column("now_at", db.Float(), nullable=False),
+            db.Column("max_price", db.Float(), nullable=True, default=0.0),
+            db.Column("min_sl_price", db.Float(), nullable=True, default=0.0),
+            db.Column("min_tp_price", db.Float(), nullable=True, default=0.0),
             db.Column("change_perc", db.Float(), nullable=False),
             db.Column("profit_dollars", db.Float(), nullable=False),
             db.Column("time_held", db.String(), nullable=False),
@@ -104,6 +106,9 @@ class DbInterface:
                 transactions.c.volume,
                 transactions.c.bought_at,
                 transactions.c.now_at,
+                transactions.c.max_price,
+                transactions.c.min_sl_price,
+                transactions.c.min_tp_price,
                 transactions.c.change_perc,
                 transactions.c.profit_dollars,
                 transactions.c.time_held,
@@ -141,6 +146,17 @@ class DbInterface:
                         if row.now_at is not None
                         else float(row.bought_at or 0)
                     ),
+                    "max_price": (
+                        float(row.max_price)
+                        if row.max_price is not None
+                        else float(row.bought_at or 0)
+                    ),
+                    "min_sl_price": (
+                        float(row.min_sl_price) if row.min_sl_price is not None else 0.0
+                    ),
+                    "min_tp_price": (
+                        float(row.min_tp_price) if row.min_tp_price is not None else 0.0
+                    ),
                     "change_perc": (
                         float(row.change_perc) if row.change_perc is not None else 0.0
                     ),
@@ -172,11 +188,7 @@ class DbInterface:
         """
         Get detailed information about a specific position.
 
-        Args:
-            symbol: Trading pair symbol
-
-        Returns:
-            Dict with position details or None
+        This revised version safely handles NoneType values from the database.
         """
         try:
             transactions = db.Table(
@@ -187,27 +199,39 @@ class DbInterface:
                 db.and_(transactions.c.symbol == symbol, transactions.c.closed == 0)
             )
 
-            result = self.connection.execute(query).fetchone()
+            with self.engine.connect() as connection:
+                result = connection.execute(query).fetchone()
 
             if not result:
                 return None
 
-            return {
-                "symbol": result.symbol,
-                "volume": float(result.volume),
-                "bought_at": float(result.bought_at),
-                "now_at": float(result.now_at),
-                "change_perc": float(result.change_perc),
-                "profit_dollars": float(result.profit_dollars),
-                "time_held": result.time_held,
-                "buy_time": result.buy_time.isoformat() if result.buy_time else None,
-                "buy_signal": result.buy_signal,
-                "tp_perc": float(result.tp_perc),
-                "sl_perc": float(result.sl_perc),
-                "order_id": result.order_id,
-                "TTP_TSL": result.TTP_TSL,
-            }
+            row_dict = dict(result._mapping)
 
+            # Safely get values and convert to float, defaulting to 0.0 if None
+            return {
+                "symbol": row_dict.get("symbol"),
+                "volume": float(row_dict.get("volume") or 0.0),
+                "bought_at": float(row_dict.get("bought_at") or 0.0),
+                "now_at": float(row_dict.get("now_at") or 0.0),
+                "change_perc": float(row_dict.get("change_perc") or 0.0),
+                "profit_dollars": float(row_dict.get("profit_dollars") or 0.0),
+                "time_held": row_dict.get("time_held"),
+                "buy_time": (
+                    row_dict.get("buy_time").isoformat()
+                    if row_dict.get("buy_time")
+                    else None
+                ),
+                "buy_signal": row_dict.get("buy_signal"),
+                "tp_perc": float(row_dict.get("tp_perc") or 0.0),
+                "sl_perc": float(row_dict.get("sl_perc") or 0.0),
+                "order_id": row_dict.get("order_id"),
+                "TTP_TSL": bool(row_dict.get("TTP_TSL", False)),
+                "max_price": float(
+                    row_dict.get("max_price") or row_dict.get("bought_at") or 0.0
+                ),
+                "min_sl_price": float(row_dict.get("min_sl_price") or 0.0),
+                "min_tp_price": float(row_dict.get("min_tp_price") or 0.0),
+            }
         except Exception as e:
             logger.error(f"💥 Error getting position details for {symbol}: {e}")
             return None
@@ -306,7 +330,6 @@ class DbInterface:
             sell_reason: Reason for selling
         """
         try:
-            # Get current position data
             position = self.get_position_details(symbol)
             if not position:
                 logger.warning(f"⚠️ No open position found for {symbol}")

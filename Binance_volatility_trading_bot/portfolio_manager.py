@@ -37,6 +37,7 @@ class PortfolioManager:
         self.TRAILING_TAKE_PROFIT = float(config.get("TRAILING_TAKE_PROFIT", 0.05))
         self.TAKE_PROFIT = float(config.get("TAKE_PROFIT", 2.0))
         self.STOP_LOSS = float(config.get("STOP_LOSS", 10.0))
+        self.REINVEST_PROFITS = self.config.get("REINVEST_PROFITS", False)
 
         # File paths
         self.coins_bought_file_path = f"{user_data_path}/coins_bought.json"
@@ -197,6 +198,13 @@ class PortfolioManager:
             # Close position in database
             self.db_interface.close_position(symbol, sell_price, reason)
 
+            if self.REINVEST_PROFITS:
+                increment = profit / self.TRADE_SLOTS
+                self.TRADE_TOTAL += increment
+                logger.info(
+                    f"💸 Reinvested profits: increased TRADE_TOTAL by {increment:.2f} to {self.TRADE_TOTAL:.2f}"
+                )
+
             # Update JSON backup
             self.save_current_state()
 
@@ -228,19 +236,22 @@ class PortfolioManager:
             return {"success": False, "reason": str(e)}
 
     def update_open_positions_details(self):
-        """Update prices, profits, TP, SL, and trailing logic for all open positions."""
+        """
+        Update prices, profits, TP, SL, and trailing logic for all open positions.
+        """
         try:
             current_prices = self._get_current_prices()
-            tsl_enabled = self.USE_TRAILING_STOP_LOSS
-            tsl_percent = self.TRAILING_STOP_LOSS / 100
-            ttp_percent = self.TRAILING_TAKE_PROFIT / 100
-            trading_fee = self.config.get("TRADING_FEE", 0.1) / 100
-            trailing_threshold = self.config.get("TRAILING_THRESHOLD", 0.8)
-            trailing_tp_bonus = self.TRAILING_TAKE_PROFIT
-            trailing_sl_distance = self.TRAILING_STOP_LOSS
+
+            trading_fee = self.config.get("TRADING_FEE", 0.075) / 100
+            tsl_enabled = self.config.get("USE_TRAILING_STOP_LOSS", True)
+            trailing_sl = self.config.get("TRAILING_STOP_LOSS", 3)
+            trailing_tp = self.config.get("TRAILING_TAKE_PROFIT", 1)
+
+            base_sl_percent = self.config.get("STOP_LOSS", 5)
+            base_tp_percent = self.config.get("TAKE_PROFIT", 3.0)
 
             positions = self.db_interface.get_open_positions()
-            for symbol, position in list(positions.items()):
+            for symbol, pos in positions.items():
                 current_price = current_prices.get(symbol, 0)
                 if current_price <= 0:
                     logger.warning(f"⚠️ Invalid price for {symbol}: {current_price}")
@@ -249,23 +260,33 @@ class PortfolioManager:
                 self.db_interface.update_position_price_and_profit_loss(
                     symbol,
                     current_price,
-                    self.notification_manager.calculate_time_held(position),
+                    self.notification_manager.calculate_time_held(pos),
                 )
 
                 position_data = self.db_interface.get_position_details(symbol)
                 entry_price = float(position_data.get("bought_at", 0))
+
                 if entry_price <= 0:
                     logger.warning(
                         f"Invalid bought_at price for {symbol}, skipping update"
                     )
                     continue
 
-                tp_perc = float(position_data.get("tp_perc", self.TAKE_PROFIT))
+                ttp_tsl_active = position_data.get("TTP_TSL", False)
+                max_price = float(position_data.get("max_price", entry_price))
+                min_sl_price = float(position_data.get("min_sl_price", 0))
+                min_tp_price = float(position_data.get("min_tp_price", 0))
 
                 buy_fee = entry_price * trading_fee
                 sell_fee = current_price * trading_fee
                 price_after_fees = current_price - sell_fee
                 entry_price_plus_fees = entry_price + buy_fee
+
+                if price_after_fees > max_price:
+                    max_price = price_after_fees
+                    self.db_interface.update_transaction_record(
+                        symbol, {"max_price": max_price}
+                    )
 
                 if entry_price_plus_fees <= 0:
                     logger.warning(
@@ -273,130 +294,100 @@ class PortfolioManager:
                     )
                     continue
 
-                price_change_inc_fees_perc = (
-                    (price_after_fees - entry_price_plus_fees) / entry_price_plus_fees
-                ) * 100
+                base_sl_price = entry_price_plus_fees * (1 - base_sl_percent / 100)
+                if price_after_fees <= base_sl_price:
+                    logger.info(
+                        f"🔴 Price reached base SL for {symbol} ({price_after_fees:.6f} ≤ {base_sl_price:.6f}), closing position."
+                    )
+                    self.execute_sell(symbol, "Price reached base SL")
+                    continue
 
-                base_tp_price = entry_price_plus_fees * (1 + self.TAKE_PROFIT / 100)
-                base_sl_price = entry_price_plus_fees * (1 - self.STOP_LOSS / 100)
-
-                position_ttp_tsl_active = position_data.get("TTP_TSL", False)
+                if symbol in self.data_provider.get_delisted_coins():
+                    logger.info(
+                        f"🔴 {symbol} is scheduled for delisting, closing position."
+                    )
+                    self.execute_sell(symbol, "Coin scheduled for delisting")
+                    continue
 
                 if tsl_enabled and not self.config.get("SESSION_TPSL_OVERRIDE", False):
-                    if not position_ttp_tsl_active:
+                    if not ttp_tsl_active:
+                        base_tp_price = entry_price_plus_fees * (
+                            1 + base_tp_percent / 100
+                        )
                         if price_after_fees >= base_tp_price:
-                            # Activate trailing stop-loss and store max_price in database
+                            min_sl_price = price_after_fees * (1 - trailing_sl / 100)
+                            min_tp_price = price_after_fees * (1 + trailing_tp / 100)
+                            sl_perc = (
+                                (min_sl_price - entry_price_plus_fees)
+                                / entry_price_plus_fees
+                            ) * 100
+                            tp_perc = (
+                                (min_tp_price - entry_price_plus_fees)
+                                / entry_price_plus_fees
+                            ) * 100
                             self.db_interface.update_transaction_record(
-                                symbol, {"TTP_TSL": True, "max_price": current_price}
+                                symbol,
+                                {
+                                    "TTP_TSL": True,
+                                    "min_sl_price": min_sl_price,
+                                    "min_tp_price": min_tp_price,
+                                    "sl_perc": sl_perc,
+                                    "tp_perc": tp_perc,
+                                },
                             )
-                            min_sl_price = current_price * (1 - tsl_percent)
-
-                            new_tp_perc = self.TAKE_PROFIT + trailing_tp_bonus
-                            new_sl_perc = new_tp_perc - trailing_sl_distance
-
-                            self.db_interface.update_position_tp(symbol, new_tp_perc)
-                            self.db_interface.update_position_sl(symbol, new_sl_perc)
-                            self.db_interface.update_transaction_record(
-                                symbol, {"min_sl_price": min_sl_price}
-                            )
-
                             logger.info(
-                                f"⚡ Trailing activated for {symbol} (price reached base TP). "
-                                f"Set TP: {new_tp_perc:.4f}%, SL: {new_sl_perc:.4f}%"
+                                f"⚡ Trailing activated for {symbol}. TP: {min_tp_price:.6f}, SL: {min_sl_price:.6f}"
                             )
                             self.save_current_state()
                             continue
-                        else:
-                            if price_after_fees <= base_sl_price:
-                                logger.info(
-                                    f"🔴 Price reached base SL for {symbol}, closing position."
-                                )
-                                self.execute_sell(
-                                    symbol, "Price reached base SL before trailing"
-                                )
-                                continue
                     else:
-                        max_price = position_data.get("max_price", current_price)
-                        min_sl_price = position_data.get(
-                            "min_sl_price", max_price * (1 - tsl_percent)
-                        )
+                        new_min_sl_price = max_price * (1 - trailing_sl / 100)
+                        new_min_tp_price = max_price * (1 + trailing_tp / 100)
 
-                        if current_price > max_price:
-                            max_price = current_price
+                        if new_min_sl_price > min_sl_price:
+                            min_sl_price = new_min_sl_price
+                            min_tp_price = new_min_tp_price
+                            sl_perc = (
+                                (min_sl_price - entry_price_plus_fees)
+                                / entry_price_plus_fees
+                            ) * 100
+                            tp_perc = (
+                                (min_tp_price - entry_price_plus_fees)
+                                / entry_price_plus_fees
+                            ) * 100
                             self.db_interface.update_transaction_record(
-                                symbol, {"max_price": max_price}
+                                symbol,
+                                {
+                                    "min_sl_price": min_sl_price,
+                                    "min_tp_price": min_tp_price,
+                                    "sl_perc": sl_perc,
+                                    "tp_perc": tp_perc,
+                                },
                             )
-
-                            trailing_sl_price = max_price * (1 - tsl_percent)
-                            if trailing_sl_price > min_sl_price:
-                                min_sl_price = trailing_sl_price
-                                self.db_interface.update_transaction_record(
-                                    symbol, {"min_sl_price": min_sl_price}
-                                )
-                                new_sl_perc = (
-                                    (entry_price - min_sl_price) / entry_price
-                                ) * 100
-                                if new_sl_perc < 0:
-                                    new_sl_perc = trailing_sl_distance
-                                self.db_interface.update_position_sl(
-                                    symbol, new_sl_perc
-                                )
-
-                        trailing_tp_price = max_price * (1 + ttp_percent)
-
-                        if price_change_inc_fees_perc >= trailing_threshold:
-                            new_tp_perc = price_change_inc_fees_perc + trailing_tp_bonus
-                            new_sl_perc = new_tp_perc - trailing_sl_distance
-                        else:
-                            new_sl_perc = (
-                                position_data.get("tp_perc", tp_perc)
-                                - trailing_sl_distance
+                            logger.debug(
+                                f"🔵 Updated trailing TP/SL for {symbol}: TP={min_tp_price:.6f}, SL={min_sl_price:.6f}"
                             )
-                            new_tp_perc = price_change_inc_fees_perc + trailing_tp_bonus
-
-                        if new_sl_perc <= 0:
-                            new_sl_perc = new_tp_perc * 0.25
-
-                        if abs(new_tp_perc - tp_perc) > 0.001:
-                            self.db_interface.update_position_tp(symbol, new_tp_perc)
-                            self.db_interface.update_position_sl(symbol, new_sl_perc)
-
-                        self.save_current_state()
-
-                        if price_after_fees >= trailing_tp_price:
-                            logger.info(
-                                f"⚡ Trailing Take Profit hit for {symbol} at {current_price:.6f}"
-                            )
-                            self.execute_sell(symbol, reason="Trailing Take Profit hit")
-                            continue
 
                         if price_after_fees <= min_sl_price:
                             logger.info(
-                                f"⚡ Trailing Stop Loss hit for {symbol} at {current_price:.6f}"
+                                f"⚡ Trailing Stop Loss hit for {symbol} at price {price_after_fees:.6f}"
                             )
-                            self.execute_sell(symbol, reason="Trailing Stop Loss hit")
+                            self.execute_sell(symbol, "Trailing Stop Loss hit")
                             continue
 
-                        if price_after_fees <= base_sl_price:
+                        if price_after_fees >= min_tp_price:
                             logger.info(
-                                f"⚡ Static Stop Loss hit during trailing for {symbol} at {current_price:.6f}"
+                                f"⚡ Trailing Take Profit hit for {symbol} at price {price_after_fees:.6f}"
                             )
-                            self.execute_sell(
-                                symbol, reason="Static Stop Loss during trailing"
-                            )
+                            self.execute_sell(symbol, "Trailing Take Profit hit")
                             continue
                 else:
+                    base_tp_price = entry_price_plus_fees * (1 + base_tp_percent / 100)
                     if price_after_fees >= base_tp_price:
                         logger.info(
-                            f"⚡ Price reached TP for {symbol} at {current_price:.6f} — executing sell"
+                            f"⚡ Take Profit hit for {symbol} at price {price_after_fees:.6f}"
                         )
-                        self.execute_sell(symbol, reason="Take Profit reached")
-                        continue
-                    elif price_after_fees <= base_sl_price:
-                        logger.info(
-                            f"⚡ Price reached SL for {symbol} at {current_price:.6f} — executing sell"
-                        )
-                        self.execute_sell(symbol, reason="Stop Loss reached")
+                        self.execute_sell(symbol, "Take Profit reached")
                         continue
 
             logger.debug(
@@ -462,7 +453,7 @@ class PortfolioManager:
             successful_sells = 0
             failed_sells = 0
 
-            for symbol in list(positions.keys()):
+            for symbol in positions.keys():
                 try:
                     self.execute_sell(symbol, reason)
                     successful_sells += 1
@@ -504,32 +495,42 @@ class PortfolioManager:
             logger.error(f"💥 Error in emergency close: {e}")
 
     def get_portfolio_summary(self) -> Dict[str, Any]:
-        """Get comprehensive portfolio summary."""
         try:
             db_stats = self.db_interface.get_portfolio_statistics()
             positions = self.db_interface.get_open_positions()
             current_prices = self._get_current_prices()
             total_current_value = 0.0
             total_invested = 0.0
+            unrealised_session_profit_incfees_total = 0.0
+            budget = self.TRADE_SLOTS * self.TRADE_TOTAL
 
             for symbol, position in positions.items():
+                current_price = current_prices.get(symbol, 0)
+                sell_fee = current_price * (self.config.get("TRADING_FEE", 0.075) / 100)
                 volume = float(position.get("volume", 0))
                 bought_at = float(position.get("bought_at", 0))
-                current_price = current_prices.get(symbol, bought_at)
+                buy_fee = bought_at * (self.config.get("TRADING_FEE", 0.075) / 100)
+
                 total_invested += volume * bought_at
                 total_current_value += volume * current_price
 
-            unrealized_pnl = total_current_value - total_invested
-            unrealized_pnl_pct = (
-                (unrealized_pnl / total_invested * 100) if total_invested > 0 else 0
+                price_change_total = (
+                    (current_price - sell_fee) - (bought_at + buy_fee)
+                ) * volume
+                unrealised_session_profit_incfees_total += price_change_total
+
+            unrealised_session_profit_incfees_perc = (
+                (unrealised_session_profit_incfees_total / budget) * 100
+                if budget > 0
+                else 0
             )
 
             return {
                 "active_positions": len(positions),
                 "total_invested": total_invested,
                 "total_current_value": total_current_value,
-                "unrealized_pnl": unrealized_pnl,
-                "unrealized_pnl_pct": unrealized_pnl_pct,
+                "unrealized_pnl": unrealised_session_profit_incfees_total,
+                "unrealized_pnl_pct": unrealised_session_profit_incfees_perc,
                 "available_slots": (
                     max(0, self.TRADE_SLOTS - len(positions))
                     if self.TRADE_SLOTS > 0

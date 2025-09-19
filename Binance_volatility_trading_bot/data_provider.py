@@ -382,3 +382,41 @@ class DataProvider:
         except Exception as e:
             logger.error(f"💥 Error getting current prices: {e}")
             return {}
+
+    def get_delisted_coins(self) -> List[str]:
+        """
+        Retrieve a list of coins that are scheduled for delisting from Binance spot trading.
+
+        Returns:
+            List[str]: List of trading pair symbols that are scheduled for delisting
+        """
+        try:
+            delist_schedule = self.client.get_spot_delist_schedule()
+            if not delist_schedule:
+                return []
+
+            # Extract all symbols from the delist schedule
+            delisted_coins = []
+            for entry in delist_schedule:
+                if (
+                    isinstance(entry, dict)
+                    and "symbols" in entry
+                    and isinstance(entry["symbols"], list)
+                ):
+                    delisted_coins.extend(entry["symbols"])
+
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_coins = [
+                coin for coin in delisted_coins if not (coin in seen or seen.add(coin))
+            ]
+
+            if unique_coins:
+                logger.debug(
+                    f"Found {len(unique_coins)} coins scheduled for delisting: {', '.join(unique_coins)}"
+                )
+            return unique_coins
+
+        except Exception as e:
+            logger.error(f"❌ Error fetching delisted coins: {e}")
+            return []
