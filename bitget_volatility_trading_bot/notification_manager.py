@@ -217,42 +217,54 @@ class NotificationManager:
         except Exception as e:
             logger.error(f"❌ Failed to send shutdown notification: {e}")
 
+    @staticmethod
+    def _fmt_price(price: float) -> str:
+        """Adaptive price formatting - significant digits, not fixed decimals."""
+        if price >= 100:
+            return f"{price:,.2f}"
+        if price >= 1:
+            return f"{price:.4f}"
+        if price >= 0.01:
+            return f"{price:.6f}"
+        return f"{price:.8f}"
+
+    @staticmethod
+    def _fmt_qty(qty: float) -> str:
+        return f"{qty:,.2f}" if abs(qty) >= 1 else f"{qty:.6f}"
+
     def _format_trade_message(self, trade_data: Dict[str, Any]) -> str:
-        """Format trade data into Telegram message."""
+        """Format trade data into a compact Telegram card."""
         symbol = trade_data.get("symbol", "Unknown")
-        side = trade_data.get("side", "Unknown")
-        quantity = trade_data.get("quantity", 0)
-        price = trade_data.get("price", 0)
+        side = trade_data.get("side", "Unknown").upper()
+        quantity = self._fmt_qty(trade_data.get("quantity", 0))
+        price = self._fmt_price(trade_data.get("price", 0))
         total = trade_data.get("total", 0)
         profit = trade_data.get("profit", 0)
         profit_pct = trade_data.get("profit_pct", 0)
-        reason_buy = trade_data.get("signal", "")
-        reason_sell = trade_data.get("reason", "")
-        reason = reason_buy if side.upper() == "BUY" else reason_sell
-
-        side_emoji = "🟢" if side.upper() == "BUY" else "🔴"
-        profit_emoji = "📈" if profit >= 0 else "📉"
         gain = trade_data.get("gain")
         gain_text = f" ({gain:+.2f}%)" if isinstance(gain, (int, float)) else ""
 
-        message = (
-            f"{side_emoji} *{side.upper()} Order Executed*\n\n"
-            f"• Symbol: `{symbol}`\n"
-            f"• Quantity: `{quantity:.8f}`\n"
-            f"• Price: `{price:.8f}`\n"
-            f"• Total: `{total:.8f} {self.pair_with}`\n"
-            f"• Reason: `{reason}{gain_text}`\n"
-        )
-
-        if side.upper() == "SELL":
-            message += (
-                f"• Profit/Loss: `{profit_emoji} {profit:.2f} {self.pair_with}`\n"
-                f"• Profit/Loss %: `{profit_emoji} {profit_pct:.2f}%`\n"
+        if side == "BUY":
+            signal = trade_data.get("signal", "")
+            return (
+                f"🟢 *BUY* `{symbol}`\n"
+                f"`{total:.2f} {self.pair_with}` @ `{price}` · {quantity} units\n"
+                f"⚡ {signal}{gain_text}\n"
+                f"🕒 {self._get_current_time()}"
             )
 
-        message += f"• Time: {self._get_current_time()}"
-
-        return message
+        # SELL - compact card with entry -> exit and hold time
+        entry = trade_data.get("entry_price")
+        entry_text = self._fmt_price(entry) if entry else "?"
+        hold = trade_data.get("time_held") or "?"
+        result_emoji = "✅" if profit >= 0 else "❌"
+        reason = trade_data.get("reason", "")
+        return (
+            f"🔴 *SELL* `{symbol}` {result_emoji} *{profit_pct:+.2f}%*\n"
+            f"`{entry_text}` → `{price}` · {profit:+.2f} {self.pair_with}\n"
+            f"⏱ held {hold} · {reason}\n"
+            f"🕒 {self._get_current_time()}"
+        )
 
     def _format_summary_message(self, balance_data: Dict[str, Any]) -> str:
         """Format summary without positions table."""

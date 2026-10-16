@@ -225,6 +225,8 @@ class PortfolioManager:
                 "side": "SELL",
                 "quantity": volume,
                 "price": float(sell_price),
+                "entry_price": bought_at,
+                "time_held": position.get("time_held"),
                 "profit": float(profit),
                 "profit_pct": float(profit_pct),
                 "total": sell_price * volume,
