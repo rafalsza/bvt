@@ -420,7 +420,7 @@ class RiskManager:
 
             # Check performance risk
             performance_threshold = self.config.get("PERFORMANCE_RISK_THRESHOLD", -15)
-            if portfolio_summary["unrealized_pnl_pct"] < -performance_threshold:
+            if portfolio_summary["unrealized_pnl_pct"] < performance_threshold:
                 risk_assessment["performance_risk"] = True
                 risk_assessment["risk_level"] = "HIGH"
 
