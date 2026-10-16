@@ -17,6 +17,10 @@ script_options:
   LOG_FILE: trades.txt
   LOG_TRADES: false
   MSG_TELEGRAM: true
+  # Telegram portfolio heartbeat (cycles ~= minutes): with open positions /
+  # while idle. Trade, error and session notifications are always immediate.
+  REPORT_ACTIVE_CYCLES: 30
+  REPORT_IDLE_CYCLES: 240
   TEST_MODE: true
   UTA_MODE: true
 trading_options:

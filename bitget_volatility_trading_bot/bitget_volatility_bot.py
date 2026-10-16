@@ -123,6 +123,11 @@ class BitgetVolatilityBot:
             self.trading_paused = False
             self.start_time = datetime.now()
 
+            # Balance-report throttling: cycles since last sent report and
+            # position count it reported (forces the first report through)
+            self._report_cycles_since_send = 0
+            self._last_reported_positions = -1
+
         except (ConfigurationFileNotFoundError, CredentialsFileNotFoundError) as e:
             logger.error(f"📁 Configuration file missing: {e}")
             print(f"{Fore.RED}Configuration Error: {e}{Style.RESET_ALL}")
@@ -400,8 +405,23 @@ class BitgetVolatilityBot:
                 f"Win Rate: {balance_report.get('win_rate', 0):.1f}%"
             )
 
-            # Send notifications
-            self.notification_manager.send_balance_update(balance_report)
+            # Balance update is noisy - send only when the position count
+            # changed or when the configured heartbeat interval elapsed
+            # (short interval while holding positions, long when idle)
+            self._report_cycles_since_send += 1
+            positions = portfolio_summary.get("active_positions", 0)
+            interval = (
+                self.script_config.get("REPORT_ACTIVE_CYCLES", 30)
+                if positions > 0
+                else self.script_config.get("REPORT_IDLE_CYCLES", 240)
+            )
+            if (
+                positions != self._last_reported_positions
+                or self._report_cycles_since_send >= interval
+            ):
+                self.notification_manager.send_balance_update(balance_report)
+                self._last_reported_positions = positions
+                self._report_cycles_since_send = 0
 
         except Exception as e:
             logger.error(f"📈 Error processing reports: {e}")
