@@ -13,6 +13,8 @@ Strategy: pump detector - buys coins that moved >= `CHANGE_IN_PRICE`% over
 
 ## Verify changes
 
+Always run the test suite **before every commit/push** - no exceptions:
+
 ```
 .venv/Scripts/python.exe -m pytest bitget_volatility_trading_bot/tests -x -q
 ```
