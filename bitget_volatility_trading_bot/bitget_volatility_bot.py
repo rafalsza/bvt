@@ -248,6 +248,7 @@ class BitgetVolatilityBot:
             )
             logger.debug("🔔 Notification manager initialized")
             self.portfolio_manager.notification_manager = self.notification_manager
+            self.portfolio_manager.risk_manager = self.risk_manager
 
             # Main trading engine that coordinates all components
             self.trading_engine = TradingEngine(

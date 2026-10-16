@@ -27,6 +27,8 @@ class PortfolioManager:
         self.db_interface = db_interface
         self.data_provider = data_provider
         self.notification_manager = None
+        # Wired post-construction by the bot (RiskManager needs this PM first)
+        self.risk_manager = None
 
         self.TRADE_TOTAL = float(config.get("TRADE_TOTAL", 100))
         self.TRADE_SLOTS = int(config.get("TRADE_SLOTS", 5))
@@ -49,6 +51,8 @@ class PortfolioManager:
         try:
             positions = self.db_interface.get_open_positions()
             logger.info(f"💼 Loaded {len(positions)} open positions from database")
+
+            self._sync_pinned_symbols(positions)
 
             # Update JSON backup with database positions
             self.save_current_state()
@@ -142,6 +146,8 @@ class PortfolioManager:
             # Log to database
             self._log_buy_transaction(order_data, signal)
 
+            self._sync_pinned_symbols()
+
             # Update JSON backup
             self.save_current_state()
             logger.info(
@@ -197,6 +203,7 @@ class PortfolioManager:
 
             # Close position in database
             self.db_interface.close_position(symbol, sell_price, reason)
+            self._sync_pinned_symbols()
 
             if self.REINVEST_PROFITS:
                 increment = profit / self.TRADE_SLOTS
@@ -234,6 +241,37 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"💥 Error executing sell: {e}")
             return {"success": False, "reason": str(e)}
+
+    def _set_post_sell_cooloff(self, symbol: str, sell_result: Dict[str, Any]):
+        """Apply adaptive cooloff after an SL/TP-triggered close, so the coin
+        is not instantly re-bought on the next volatility signal."""
+        risk_manager = self.risk_manager
+        if (
+            not risk_manager
+            or not sell_result
+            or not sell_result.get("success")
+        ):
+            return
+        profit_pct = sell_result.get("profit_pct", 0)
+        if profit_pct < -5:
+            trade_result = "LOSS"
+        elif profit_pct < 2:
+            trade_result = "SMALL_PROFIT"
+        else:
+            trade_result = "PROFIT"
+        risk_manager.set_adaptive_cooloff(symbol, trade_result)
+
+    def _sync_pinned_symbols(self, positions: Dict[str, Any] = None):
+        """Keep open-position symbols pinned in the price stream so they are
+        always priced even when CUSTOM_LIST filtering is active."""
+        if self.data_provider is None:
+            return
+        try:
+            if positions is None:
+                positions = self.db_interface.get_open_positions()
+            self.data_provider.pinned_symbols = set(positions.keys())
+        except Exception as e:
+            logger.debug(f"⚠️ Failed to sync pinned symbols: {e}")
 
     def update_open_positions_details(self):
         """
@@ -299,14 +337,18 @@ class PortfolioManager:
                     logger.info(
                         f"🔴 Price reached base SL for {symbol} ({price_after_fees:.6f} ≤ {base_sl_price:.6f}), closing position."
                     )
-                    self.execute_sell(symbol, "Price reached base SL")
+                    sell_result = self.execute_sell(symbol, "Price reached base SL")
+                    self._set_post_sell_cooloff(symbol, sell_result)
                     continue
 
                 if symbol in self.data_provider.get_delisted_coins():
                     logger.info(
                         f"🔴 {symbol} is scheduled for delisting, closing position."
                     )
-                    self.execute_sell(symbol, "Coin scheduled for delisting")
+                    sell_result = self.execute_sell(
+                        symbol, "Coin scheduled for delisting"
+                    )
+                    self._set_post_sell_cooloff(symbol, sell_result)
                     continue
 
                 if tsl_enabled and not self.config.get("SESSION_TPSL_OVERRIDE", False):
@@ -372,14 +414,20 @@ class PortfolioManager:
                             logger.info(
                                 f"⚡ Trailing Stop Loss hit for {symbol} at price {price_after_fees:.6f}"
                             )
-                            self.execute_sell(symbol, "Trailing Stop Loss hit")
+                            sell_result = self.execute_sell(
+                                symbol, "Trailing Stop Loss hit"
+                            )
+                            self._set_post_sell_cooloff(symbol, sell_result)
                             continue
 
                         if price_after_fees >= min_tp_price:
                             logger.info(
                                 f"⚡ Trailing Take Profit hit for {symbol} at price {price_after_fees:.6f}"
                             )
-                            self.execute_sell(symbol, "Trailing Take Profit hit")
+                            sell_result = self.execute_sell(
+                                symbol, "Trailing Take Profit hit"
+                            )
+                            self._set_post_sell_cooloff(symbol, sell_result)
                             continue
                 else:
                     base_tp_price = entry_price_plus_fees * (1 + base_tp_percent / 100)
@@ -387,7 +435,10 @@ class PortfolioManager:
                         logger.info(
                             f"⚡ Take Profit hit for {symbol} at price {price_after_fees:.6f}"
                         )
-                        self.execute_sell(symbol, "Take Profit reached")
+                        sell_result = self.execute_sell(
+                            symbol, "Take Profit reached"
+                        )
+                        self._set_post_sell_cooloff(symbol, sell_result)
                         continue
 
             logger.debug(

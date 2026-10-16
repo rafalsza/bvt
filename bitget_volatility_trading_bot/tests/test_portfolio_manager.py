@@ -38,7 +38,9 @@ class TestPortfolioManagerUpdatePositions(unittest.TestCase):
         self.pm.data_provider = MagicMock()
         self.pm.data_provider.get_delisted_coins.return_value = []
         self.pm.execute_sell = MagicMock()
+        self.pm.execute_sell.return_value = {"success": True, "profit_pct": -6.0}
         self.pm.save_current_state = MagicMock()
+        self.pm.risk_manager = MagicMock()
 
     def test_trailing_activated_when_price_reaches_base_tp(self):
         self.pm._get_current_prices.return_value = {
@@ -147,6 +149,71 @@ class TestPortfolioManagerUpdatePositions(unittest.TestCase):
         self.assertGreater(payload["sl_perc"], 0)
         # new min_sl_price moved up from 98.9
         self.assertGreater(payload["min_sl_price"], 98.9)
+
+    def test_post_sell_cooloff_applied_on_sl_close(self):
+        # price below base SL -> sell at a loss -> LOSS cooloff blocks instant rebuy
+        self.pm._get_current_prices.return_value = {"BTCUSDT": 89}
+        self.pm.db_interface.get_open_positions.return_value = {
+            "BTCUSDT": {"bought_at": 100},
+        }
+        self.pm.db_interface.get_position_details.return_value = {
+            "bought_at": 100,
+            "tp_perc": 2,
+            "sl_perc": 10,
+            "TTP_TSL": False,
+        }
+
+        self.pm.update_open_positions_details()
+
+        self.pm.execute_sell.assert_called_once_with(
+            "BTCUSDT", "Price reached base SL"
+        )
+        self.pm.risk_manager.set_adaptive_cooloff.assert_called_once_with(
+            "BTCUSDT", "LOSS"
+        )
+
+    def test_post_sell_cooloff_profit_result(self):
+        # trailing TP close at a profit -> PROFIT cooloff
+        self.pm.execute_sell.return_value = {"success": True, "profit_pct": 12.6}
+        self.pm._get_current_prices.return_value = {"BTCUSDT": 104}
+        self.pm.db_interface.get_open_positions.return_value = {
+            "BTCUSDT": {"bought_at": 100},
+        }
+        self.pm.db_interface.get_position_details.return_value = {
+            "bought_at": 100,
+            "tp_perc": 3,
+            "sl_perc": 2,
+            "TTP_TSL": True,
+            # min_sl above the freshly trailed level -> no SL update, so the
+            # stored min_tp stays 100 and the 103.92 print triggers TP
+            "min_sl_price": 103,
+            "min_tp_price": 100,
+            "max_price": 103,
+        }
+
+        self.pm.update_open_positions_details()
+
+        self.pm.execute_sell.assert_called_once_with(
+            "BTCUSDT", "Trailing Take Profit hit"
+        )
+        args = self.pm.risk_manager.set_adaptive_cooloff.call_args
+        self.assertEqual(args.args[1], "PROFIT")
+
+    def test_no_cooloff_without_risk_manager(self):
+        # back-compat: no risk_manager wired -> nothing crashes, no cooloff
+        self.pm.risk_manager = None
+        self.pm._get_current_prices.return_value = {"BTCUSDT": 89}
+        self.pm.db_interface.get_open_positions.return_value = {
+            "BTCUSDT": {"bought_at": 100},
+        }
+        self.pm.db_interface.get_position_details.return_value = {
+            "bought_at": 100,
+            "tp_perc": 2,
+            "sl_perc": 10,
+            "TTP_TSL": False,
+        }
+        self.pm.update_open_positions_details()
+        self.pm.execute_sell.assert_called_once()
 
 
 class TestExtractOrderData(unittest.TestCase):

@@ -68,6 +68,23 @@ class TestFiltering:
         assert provider._should_include_symbol("DOGEUSDT") is False
         assert provider._should_include_symbol("BTCUSDC") is False
 
+    def test_custom_list_full_pair_format(self, client):
+        # importer writes full market ids (BTCUSDT) - these must also match
+        with patch("data_provider.ExternalSignalManager"):
+            provider = DataProvider(
+                client, _make_config(CUSTOM_LIST=True, TICKERS_LIST="x.txt")
+            )
+        provider.tickers = ["BTCUSDT", "ETHUSDT"]
+        assert provider._should_include_symbol("BTCUSDT") is True
+        assert provider._should_include_symbol("DOGEUSDT") is False
+
+    def test_pinned_symbols_bypass_filters(self, dp):
+        # open positions must be priced even outside the ticker list / FIATS
+        dp.pinned_symbols = {"SHITCOINUSDT"}
+        assert dp._should_include_symbol("SHITCOINUSDT") is True
+        dp.FIATS = ["SHIT"]
+        assert dp._should_include_symbol("SHITCOINUSDT") is True
+
 
 class TestHistoricalBuffer:
     def test_initialize_storage_size(self, dp):

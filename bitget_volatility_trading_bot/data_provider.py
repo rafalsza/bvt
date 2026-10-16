@@ -37,6 +37,10 @@ class DataProvider:
             "EX_COINS", ["BUSD", "USDT", "USDC", "DAI", "TUSD"]
         )
 
+        # Symbols that must always be priced regardless of list filters
+        # (open positions - PortfolioManager keeps this in sync)
+        self.pinned_symbols = set()
+
         # Load custom tickers if enabled
         self.tickers = []
         if self.CUSTOM_LIST and self.TICKERS_LIST:
@@ -154,14 +158,19 @@ class DataProvider:
         Returns:
             bool: True if symbol should be included
         """
+        # Open positions must always be priced, even outside the ticker list
+        if symbol in self.pinned_symbols:
+            return True
+
         # Check if symbol contains any excluded fiat pairs
         if any(fiat in symbol for fiat in self.FIATS):
             return False
 
         if self.CUSTOM_LIST:
-            # Use custom ticker list
+            # Ticker files hold either full pairs ("BTCUSDT") or bare base
+            # assets ("BTC") - accept both
             base_symbol = symbol.replace(self.PAIR_WITH, "")
-            return base_symbol in self.tickers
+            return symbol in self.tickers or base_symbol in self.tickers
         else:
             # Use pair filtering
             return self.PAIR_WITH in symbol
