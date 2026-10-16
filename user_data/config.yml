@@ -18,6 +18,7 @@ script_options:
   LOG_TRADES: false
   MSG_TELEGRAM: true
   TEST_MODE: true
+  UTA_MODE: true
 trading_options:
   CHANGE_IN_PRICE: 2.5
   COINS_MAX_VOLUME: 5000000000
@@ -71,7 +72,7 @@ trading_options:
   MAX_PORTFOLIO_EXPOSURE: 10000
   MAX_PORTFOLIO_VALUE: 1000
   MIN_POSITIONS_CONCENTRATION: 3
-  PAIR_WITH: USDC
+  PAIR_WITH: USDT
   PERFORMANCE_RISK_THRESHOLD: -15
   RECHECK_INTERVAL: 4
   REINVEST_PROFITS: true
@@ -80,11 +81,11 @@ trading_options:
   SESSION_TAKE_PROFIT: 5
   SESSION_TPSL_OVERRIDE: false
   SIGNALLING_MODULES:
-  - import_binance_tickers_coingecko
+  - import_bitget_tickers_coingecko
   - external_strategies.rs_buy_dip
   STOP_LOSS: 5.0
   TAKE_PROFIT: 5.0
-  TICKERS_LIST: tickerlists/tickers_all.txt
+  TICKERS_LIST: tickerlists/tickers_bitget_USDT.txt
   TIME_DIFFERENCE: 1
   TRADE_SLOTS: 10
   TRADE_TOTAL: 500

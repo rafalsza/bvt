@@ -15,12 +15,12 @@ services:
     image: bvt_bot
     restart: unless-stopped
     container_name: bvt_UI
-    working_dir: /Binance_volatility_trading_bot/dash_UI
+    working_dir: /bitget_volatility_trading_bot/dash_UI
     command: ["python", "dash_app.py"]
     ports:
       - "80:8050"
     volumes:
-      - "./Binance_volatility_trading_bot/dash_UI:/Binance_volatility_trading_bot/dash_UI"
+      - "./bitget_volatility_trading_bot/dash_UI:/bitget_volatility_trading_bot/dash_UI"
       - "./user_data:/user_data"
       - "/var/run/docker.sock:/var/run/docker.sock"
     networks:

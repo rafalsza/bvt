@@ -22,7 +22,7 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
-COPY /Binance_volatility_trading_bot/. .
+COPY /bitget_volatility_trading_bot/. .
 
 # Set the command to run the application
-CMD ["python", "BinanceDetectMoonings.py"]
+CMD ["python", "bitget_volatility_bot.py"]

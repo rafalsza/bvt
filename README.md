@@ -1,19 +1,20 @@
-# Binance Volitility Trading Bot
+# Bitget Volatility Trading Bot
 
 ## Description
-This Binance trading bot analyses the changes in price across all coins on Binance and place trades on the most volatile ones. 
-In addition to that, this Binance trading algorithm will also keep track of all the coins bought and sell them according to your specified Stop Loss and Take Profit.
+This Bitget trading bot analyses the changes in price across all coins on Bitget and place trades on the most volatile ones. 
+In addition to that, this Bitget trading algorithm will also keep track of all the coins bought and sell them according to your specified Stop Loss and Take Profit.
 
-The bot will listen to changes in price accross all coins on Binance. By default, we're only picking USDT pairs. We're excluding Margin (like BTCDOWNUSDT) and Fiat pairs
+The bot will listen to changes in price accross all coins on Bitget. By default, we're only picking USDT pairs. We're excluding Margin (like BTCDOWNUSDT) and Fiat pairs
 
 > Information below is an example and is all configurable
 
 - The bot checks if the any coin has gone up by more than 3% in the last 5 minutes
-- The bot will buy 100 USDT of the most volatile coins on Binance
+- The bot will buy 100 USDT of the most volatile coins on Bitget
 - The bot will sell at 6% profit or 3% stop loss
 
 
-You can follow the [Binance volatility bot guide](https://www.cryptomaton.org/2021/05/08/how-to-code-a-binance-trading-bot-that-detects-the-most-volatile-coins-on-binance/) for a step-by-step walkthrough of the bot development.
+## Fork note
+This project is a volatility trading bot running on the Bitget exchange (spot), communicating through the CCXT library.
 
 ## READ BEFORE USE
 1. If you use the `TEST_MODE: False` in your config, you will be using REAL money.
@@ -22,11 +23,12 @@ You can follow the [Binance volatility bot guide](https://www.cryptomaton.org/20
 4. Depending on the current market, the default config might not do much, so you will have to adapt it to your own strategy.
 
 ## Usage
-Please checkout our wiki pages:
+Configure the bot via `user_data/config.yml` and `user_data/creds.yml`, then run:
 
-- [Setup Guide](https://github.com/CyberPunkMetalHead/Binance-volatility-trading-bot/wiki/Setup-Guide)
-- [Bot Strategy Guide](https://github.com/CyberPunkMetalHead/Binance-volatility-trading-bot/wiki/Bot-Strategy-Guide)
-- [Configuration Guide](https://github.com/CyberPunkMetalHead/Binance-volatility-trading-bot/wiki/Configuration)
+```
+cd bitget_volatility_trading_bot
+python bitget_volatility_bot.py
+```
 
 
 ## Running the web UI

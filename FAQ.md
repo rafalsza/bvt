@@ -16,7 +16,7 @@ telegram:
 | `APIError(code=-1021): Timestamp for this request was 1000ms ahead of the server's time` |  Update your computer/servers ntp server to `time.nist.gov` |
 |`'NoneType' object has no attribute 'encode'`| Your API key is not correct. |
 |`Insufficient Funds` Error| Make sure you have the available USDT. Make sure you dont have lots of it on order. Ensure you QUANTITY is at least 15. |
-| Other Binance API Errors| Go take a look at the [Binance API documentation Exceptions](https://github.com/binance/binance-spot-api-docs/blob/master/errors.md) page |
+| Other Bitget API Errors| Go take a look at the [Bitget API documentation](https://www.bitget.com/docs/common-doc/introduce/restful) page |
 
 ## Questions and Answers
 
