@@ -147,6 +147,52 @@ class TestVolatilityDetection:
         dp.initialize_historical_data()
         assert dp._detect_volatility() == {}
 
+    def _feed_with_volume(self, dp, prices, volumes):
+        dp.initialize_historical_data()
+        now = datetime.now()
+        for snap in prices:
+            dp._add_to_historical(
+                {
+                    s: {"price": p, "volume": volumes[s], "time": now}
+                    for s, p in snap.items()
+                }
+            )
+
+    def test_low_volume_signal_blocked(self, dp):
+        dp.COINS_MIN_VOLUME = 100_000_000
+        dp.COINS_MAX_VOLUME = 5_000_000_000
+        self._feed_with_volume(
+            dp,
+            [{"BTCUSDT": 100.0}, {"BTCUSDT": 105.0}],
+            {"BTCUSDT": 10_000_000},  # thin market - pump is likely fake
+        )
+        assert dp._detect_volatility() == {}
+
+    def test_high_volume_signal_blocked(self, dp):
+        dp.COINS_MIN_VOLUME = 100_000_000
+        dp.COINS_MAX_VOLUME = 5_000_000_000
+        self._feed_with_volume(
+            dp,
+            [{"BTCUSDT": 100.0}, {"BTCUSDT": 105.0}],
+            {"BTCUSDT": 20_000_000_000},  # mega-cap volume spike
+        )
+        assert dp._detect_volatility() == {}
+
+    def test_in_range_volume_signal_passes(self, dp):
+        dp.COINS_MIN_VOLUME = 100_000_000
+        dp.COINS_MAX_VOLUME = 5_000_000_000
+        self._feed_with_volume(
+            dp,
+            [{"BTCUSDT": 100.0}, {"BTCUSDT": 105.0}],
+            {"BTCUSDT": 500_000_000},
+        )
+        assert "BTCUSDT" in dp._detect_volatility()
+
+    def test_missing_volume_still_signals(self, dp):
+        # no volume info available -> detector is not blocked
+        self._feed_prices(dp, {"BTCUSDT": 100.0}, {"BTCUSDT": 105.0})
+        assert "BTCUSDT" in dp._detect_volatility()
+
 
 class TestPriceChange:
     def test_min_max_based_change(self, dp):

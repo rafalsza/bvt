@@ -31,8 +31,8 @@ python bitget_volatility_bot.py
 ```
 
 ## Running from docker
-1. `docker compose -f docker-compose-new.yml up -d --build` (bot only)
-2. `docker-compose up` for the legacy stack with the UI
+1. `docker compose -f docker-compose-new.yml up -d --build`
+2. `docker-compose up` (legacy single-image variant)
 
 ## VPS deployment (TEST_MODE)
 Ready-to-use deployment for an Oracle free-tier VPS lives in `deploy/`:

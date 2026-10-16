@@ -11,20 +11,5 @@ services:
     networks:
       - bvt
 
-  dash-container:
-    image: bvt_bot
-    restart: unless-stopped
-    container_name: bvt_UI
-    working_dir: /bitget_volatility_trading_bot/dash_UI
-    command: ["python", "dash_app.py"]
-    ports:
-      - "80:8050"
-    volumes:
-      - "./bitget_volatility_trading_bot/dash_UI:/bitget_volatility_trading_bot/dash_UI"
-      - "./user_data:/user_data"
-      - "/var/run/docker.sock:/var/run/docker.sock"
-    networks:
-      - bvt
-
 networks:
   bvt:

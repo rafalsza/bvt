@@ -36,6 +36,9 @@ class DataProvider:
         self.EXCLUDED_COINS = config.get(
             "EX_COINS", ["BUSD", "USDT", "USDC", "DAI", "TUSD"]
         )
+        # 24h quote-volume gate for buy signals (USDT terms)
+        self.COINS_MIN_VOLUME = config.get("COINS_MIN_VOLUME", 0)
+        self.COINS_MAX_VOLUME = config.get("COINS_MAX_VOLUME", float("inf"))
 
         # Symbols that must always be priced regardless of list filters
         # (open positions - PortfolioManager keeps this in sync)
@@ -143,6 +146,7 @@ class DataProvider:
             if self._should_include_symbol(symbol):
                 filtered_prices[symbol] = {
                     "price": float(ticker["price"]),
+                    "volume": float(ticker.get("volume") or 0),
                     "time": datetime.now(),
                 }
 
@@ -254,20 +258,32 @@ class DataProvider:
 
                     # Check if change exceeds threshold
                     change_threshold = self.config.get("CHANGE_IN_PRICE", 3)
-                    if abs(price_change) > change_threshold:
-                        volatile_coins[symbol] = {
-                            "buy_signal": (
-                                "volatility_gain"
-                                if price_change > 0
-                                else "volatility_drop"
-                            ),
-                            "value": 1,
-                            "gain": round(price_change, 3),
-                        }
+                    if abs(price_change) <= change_threshold:
+                        continue
 
-                        logger.info(
-                            f"🎯 Volatility detected: {symbol} +{price_change:.3f}%"
-                        )
+                    # Gate on 24h quote volume (USDT) - thin markets produce
+                    # fake pumps that mean-revert instantly. Symbols without
+                    # volume info are left out only when a min bound is set.
+                    volume = current_prices[symbol].get("volume")
+                    if volume is not None and (
+                        volume < self.COINS_MIN_VOLUME
+                        or volume > self.COINS_MAX_VOLUME
+                    ):
+                        continue
+
+                    volatile_coins[symbol] = {
+                        "buy_signal": (
+                            "volatility_gain"
+                            if price_change > 0
+                            else "volatility_drop"
+                        ),
+                        "value": 1,
+                        "gain": round(price_change, 3),
+                    }
+
+                    logger.info(
+                        f"🎯 Volatility detected: {symbol} +{price_change:.3f}%"
+                    )
 
                 except Exception as e:
                     logger.debug(f"⚠️ Error analyzing {symbol}: {e}")

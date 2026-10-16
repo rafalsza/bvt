@@ -12,22 +12,5 @@ services:
     networks:
       - bvt
 
-  bvt-UI:
-    build:
-      context: .
-      dockerfile: ./Dockerfile_dash_UI
-    restart: unless-stopped
-    container_name: bvt_UI
-    image: bvt_ui
-    volumes_from:
-      - bvt-bot
-    volumes:
-      - "./user_data:/user_data"
-      - "./bitget_volatility_trading_bot/dash_UI:/dash_UI"
-    ports:
-      - "80:8050"
-    networks:
-      - bvt
-
 networks:
   bvt:

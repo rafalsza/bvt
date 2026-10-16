@@ -141,7 +141,11 @@ class BitgetClient:
                 price = ticker.get("last") or ticker.get("close")
                 if price:
                     result.append(
-                        {"symbol": self._from_ccxt_symbol(unified), "price": str(price)}
+                        {
+                            "symbol": self._from_ccxt_symbol(unified),
+                            "price": str(price),
+                            "volume": str(ticker.get("quoteVolume") or 0),
+                        }
                     )
             return result
         except Exception as e:
