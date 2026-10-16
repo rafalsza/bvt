@@ -162,6 +162,7 @@ class PortfolioManager:
                 "total": order_data.get("volume") * current_price,
                 "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "signal": signal.get("buy_signal", "unknown"),
+                "gain": signal.get("gain"),
             }
             self.notification_manager.send_trade_notification(trade_data)
 

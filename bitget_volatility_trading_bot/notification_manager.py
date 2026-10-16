@@ -232,6 +232,8 @@ class NotificationManager:
 
         side_emoji = "🟢" if side.upper() == "BUY" else "🔴"
         profit_emoji = "📈" if profit >= 0 else "📉"
+        gain = trade_data.get("gain")
+        gain_text = f" ({gain:+.2f}%)" if isinstance(gain, (int, float)) else ""
 
         message = (
             f"{side_emoji} *{side.upper()} Order Executed*\n\n"
@@ -239,7 +241,7 @@ class NotificationManager:
             f"• Quantity: `{quantity:.8f}`\n"
             f"• Price: `{price:.8f}`\n"
             f"• Total: `{total:.8f} {self.pair_with}`\n"
-            f"• Reason: `{reason}`\n"
+            f"• Reason: `{reason}{gain_text}`\n"
         )
 
         if side.upper() == "SELL":
