@@ -31,3 +31,8 @@ _*.txt
 *.zip
 *.tmp
 
+
+# Backtest artifacts (large data caches / generated reports)
+.venv-bt/
+backtest/data/
+backtest/report/

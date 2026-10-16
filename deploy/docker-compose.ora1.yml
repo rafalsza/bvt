@@ -1,0 +1,33 @@
+# Deployment for ora-1 (Oracle free tier, ~1GB RAM).
+# Usage: docker compose -f deploy/docker-compose.ora1.yml up -d --build
+# user_data/ must exist next to the repo root and contain config.yml + creds.yml.
+
+services:
+  bvt-bot:
+    build:
+      context: ..
+      dockerfile: Dockerfile-bot
+    image: bvt_bot:latest
+    container_name: bvt_bot
+    restart: unless-stopped
+    volumes:
+      # persistent state: config, credentials, transactions.db, coins_bought.json
+      - ../user_data:/user_data
+      # runtime logs outlive the container
+      - ../bitget_volatility_trading_bot/logs:/bitget_volatility_trading_bot/logs
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      - bvt
+
+networks:
+  bvt:
+    name: bvt

@@ -1,11 +1,11 @@
-FROM python:3.12.11-slim-buster
-
+FROM python:3.12-slim-bookworm
 
 COPY /requirements.txt ./
-RUN python -m pip install --upgrade pip\
+RUN python -m pip install --upgrade pip \
   && pip install --no-cache-dir -r requirements.txt
 
-COPY /user_data/. ./user_data/
+# user_data (config.yml, creds.yml, transactions.db) is mounted as a
+# runtime volume - never bake credentials into the image.
 
 WORKDIR /bitget_volatility_trading_bot
 COPY /bitget_volatility_trading_bot/. ./bitget_volatility_trading_bot/
