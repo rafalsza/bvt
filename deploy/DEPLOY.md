@@ -22,7 +22,7 @@ Skrypt: swap 4G -> build -> `docker compose up -d`.
 ```bash
 docker logs -f bvt_bot                                   # logi na zywo
 docker compose -f deploy/docker-compose.ora1.yml down    # stop
-git -C ~/bvt pull && docker compose -f deploy/docker-compose.ora1.yml up -d --build   # update
+git -C ~/bvt pull && docker compose -f deploy/docker-compose.ora1.yml up -d --build && docker image prune -f   # update (+ always drop old images)
 docker stats bvt_bot                                     # RAM/CPU
 ```
 

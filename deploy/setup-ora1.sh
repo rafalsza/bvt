@@ -36,4 +36,7 @@ echo "==> 4/4 Build & start"
 cd "$APP_DIR"
 docker compose -f deploy/docker-compose.ora1.yml up -d --build
 
+# always drop superseded image versions after a rebuild (VPS disk is small)
+docker image prune -f >/dev/null
+
 echo "Done. Logs: docker logs -f bvt_bot"
