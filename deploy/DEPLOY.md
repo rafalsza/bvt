@@ -8,7 +8,7 @@ scp user_data/creds.yml ora-1:~/creds.yml
 
 # na ora-1
 ssh ora-1
-git clone git@github.com:rafalsza/bvt.git ~/bvt
+git clone https://github.com/rafalsza/bvt.git ~/bvt
 mkdir -p ~/bvt/user_data
 mv ~/creds.yml ~/bvt/user_data/
 cd ~/bvt

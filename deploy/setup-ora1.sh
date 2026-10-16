@@ -3,7 +3,7 @@
 # Run as: bash deploy/setup-ora1.sh   (from anywhere; uses sudo)
 set -euo pipefail
 
-REPO_URL="git@github.com:rafalsza/bvt.git"
+REPO_URL="https://github.com/rafalsza/bvt.git"
 APP_DIR="$HOME/bvt"
 
 echo "==> 1/4 Swap: bumping to ~4G total"
