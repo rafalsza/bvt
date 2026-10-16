@@ -4,12 +4,12 @@ COPY /requirements.txt ./
 RUN python -m pip install --upgrade pip \
   && pip install --no-cache-dir -r requirements.txt
 
-# user_data (config.yml, creds.yml, transactions.db) is mounted as a
-# runtime volume - never bake credentials into the image.
+# Package contents live directly in /app so that
+# globals.user_data_path (parent of package + /user_data) resolves to
+# /user_data - which compose mounts from the host.
+# user_data (config.yml, creds.yml, transactions.db) is a runtime volume;
+# credentials are never baked into the image.
+WORKDIR /app
+COPY /bitget_volatility_trading_bot/. ./
 
-WORKDIR /bitget_volatility_trading_bot
-COPY /bitget_volatility_trading_bot/. ./bitget_volatility_trading_bot/
-
-EXPOSE 8501
-	
 CMD ["python", "bitget_volatility_bot.py"]

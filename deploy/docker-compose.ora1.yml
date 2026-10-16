@@ -13,8 +13,8 @@ services:
     volumes:
       # persistent state: config, credentials, transactions.db, coins_bought.json
       - ../user_data:/user_data
-      # runtime logs outlive the container
-      - ../bitget_volatility_trading_bot/logs:/bitget_volatility_trading_bot/logs
+      # runtime logs outlive the container (bot writes ./logs under /app)
+      - ../bitget_volatility_trading_bot/logs:/app/logs
     deploy:
       resources:
         limits:
