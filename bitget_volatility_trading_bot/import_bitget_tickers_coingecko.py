@@ -89,7 +89,7 @@ class BitgetTickerImporter:
                 # Process coins and create ranked list
                 for coin in page_data:
                     symbol = coin.get("symbol", "").upper()
-                    rank = coin.get("market_cap_rank", 999999)
+                    rank = coin.get("market_cap_rank") or 999999
 
                     if symbol and not self._is_stablecoin(symbol):
                         bitget_symbol = f"{symbol}{self.pair_with}"
