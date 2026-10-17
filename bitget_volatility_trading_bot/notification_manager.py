@@ -252,7 +252,7 @@ class NotificationManager:
             return (
                 f"🟢 *BUY* `{symbol}`\n"
                 f"`{total:.2f} {self.pair_with}` @ `{price}` · {quantity} units\n"
-                f"⚡ {signal}{gain_text}\n"
+                f"⚡ `{signal}`{gain_text}\n"
                 f"🕒 {self._get_current_time()}"
             )
 
@@ -265,7 +265,7 @@ class NotificationManager:
         return (
             f"🔴 *SELL* `{symbol}` {result_emoji} *{profit_pct:+.2f}%*\n"
             f"`{entry_text}` → `{price}` · {profit:+.2f} {self.pair_with}\n"
-            f"⏱ held {hold} · {reason}\n"
+            f"⏱ held {hold} · `{reason}`\n"
             f"🕒 {self._get_current_time()}"
         )
 

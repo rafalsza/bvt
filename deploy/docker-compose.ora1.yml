@@ -15,6 +15,8 @@ services:
       - ../user_data:/user_data
       # runtime logs outlive the container (bot writes ./logs under /app)
       - ../bitget_volatility_trading_bot/logs:/app/logs
+      # generated coin universe persists across rebuilds
+      - ../bitget_volatility_trading_bot/tickerlists:/app/tickerlists
     deploy:
       resources:
         limits:

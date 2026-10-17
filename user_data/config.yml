@@ -24,7 +24,7 @@ trading_options:
   CUSTOM_LIST: true
   # CoinGecko market-cap-ranked list size (refreshed every 6h by importer)
   TICKERS_NUMBER: 300
-  CUSTOM_LIST_AUTORELOAD: false
+  CUSTOM_LIST_AUTORELOAD: true
   FIATS:
   - EURUSDT
   - GBPUSDT
