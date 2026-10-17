@@ -122,6 +122,9 @@ class NotificationManager:
                 self._send_telegram_message(
                     f"<pre>{table_message}</pre>", parse_mode="HTML"
                 )
+            logger.info(
+                f"📱 Balance update sent ({total_positions} open positions)"
+            )
 
         except Exception as e:
             logger.error(f"💥 Error sending balance update: {e}")
