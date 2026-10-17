@@ -130,6 +130,32 @@ class TestCooloff:
         rm.position_cooloff["BTCUSDT"] = datetime.now() - timedelta(minutes=1)
         assert rm._check_cooloff_period("BTCUSDT") is True
 
+
+class TestDailyTradeCap:
+    def test_cap_disabled_by_default(self, rm, portfolio):
+        assert rm._check_daily_symbol_trade_cap("BTCUSDT") is True
+        portfolio.db_interface.count_trades_since.assert_not_called()
+
+    def test_cap_blocks_after_n_trades(self, rm, portfolio):
+        rm.config["MAX_TRADES_PER_SYMBOL_PER_DAY"] = 3
+        portfolio.db_interface.count_trades_since.return_value = 3
+        assert rm._check_daily_symbol_trade_cap("UMXMUSDT") is False
+        portfolio.db_interface.count_trades_since.return_value = 2
+        assert rm._check_daily_symbol_trade_cap("UMXMUSDT") is True
+
+    def test_cap_blocks_buy_in_validate_signals(self, rm, portfolio):
+        rm.config["MAX_TRADES_PER_SYMBOL_PER_DAY"] = 1
+        portfolio.db_interface.count_trades_since.return_value = 1
+        signals = {"UMXMUSDT": {"buy_signal": "x"}}
+        assert rm.validate_signals(signals) == {}
+
+    def test_cap_does_not_block_sells(self, rm, portfolio):
+        rm.config["MAX_TRADES_PER_SYMBOL_PER_DAY"] = 1
+        portfolio.db_interface.count_trades_since.return_value = 99
+        portfolio.get_portfolio_summary.return_value["active_positions"] = 1
+        signals = {"UMXMUSDT": {"sell_signal": "x"}}
+        assert "UMXMUSDT" in rm.validate_signals(signals)
+
     def test_adaptive_cooloff_multipliers(self, rm):
         rm.set_adaptive_cooloff("A", "LOSS")
         rm.set_adaptive_cooloff("B", "SMALL_PROFIT")

@@ -109,8 +109,41 @@ class RiskManager:
 
         if not is_sell:
             risk_checks.append(self._check_trade_slots(portfolio_summary))
+            risk_checks.append(self._check_daily_symbol_trade_cap(coin))
 
         return all(risk_checks)
+
+    def _check_daily_symbol_trade_cap(self, coin: str) -> bool:
+        """Limit how many times the same coin can be bought in one day -
+        repeated rebuys of a fading pump are lossy. Counts from
+        transactions.db so it survives restarts. 0 disables the cap."""
+        try:
+            max_trades = int(
+                self.config.get("MAX_TRADES_PER_SYMBOL_PER_DAY", 0) or 0
+            )
+            if max_trades <= 0:
+                return True
+            if not self.portfolio_manager or not getattr(
+                self.portfolio_manager, "db_interface", None
+            ):
+                return True
+
+            day_start = datetime.now().replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            count = self.portfolio_manager.db_interface.count_trades_since(
+                coin, day_start
+            )
+            if count >= max_trades:
+                logger.info(
+                    f"🚫 Daily trade cap reached for {coin}: "
+                    f"{count}/{max_trades} - skipping buy"
+                )
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"💥 Error checking daily trade cap for {coin}: {e}")
+            return True
 
     def check_session_limits(self, current_profit: float) -> str:
         """

@@ -460,6 +460,23 @@ class DbInterface:
                 "worst_trade": 0,
             }
 
+    def count_trades_since(self, symbol: str, since) -> int:
+        """Count transactions (open or closed) for a symbol since a datetime."""
+        try:
+            query = db.text(
+                """
+                SELECT COUNT(*) FROM transactions
+                WHERE symbol = :symbol AND buy_time >= :since
+                """
+            )
+            result = self.connection.execute(
+                query, {"symbol": symbol, "since": since}
+            ).fetchone()
+            return int(result[0] if result else 0)
+        except Exception as e:
+            logger.error(f"💥 Error counting trades for {symbol}: {e}")
+            return 0
+
     def get_trading_history(
         self, limit: int = 100, symbol: str = None
     ) -> List[Dict[str, Any]]:

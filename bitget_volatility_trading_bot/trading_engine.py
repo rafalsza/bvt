@@ -178,7 +178,7 @@ class TradingEngine:
 
                 # Determine trade result based on P&L
                 profit_pct = sell_result.get("profit_pct", 0)
-                if profit_pct < -5:
+                if profit_pct < 0:
                     trade_result = "LOSS"
                 elif profit_pct < 2:
                     trade_result = "SMALL_PROFIT"
