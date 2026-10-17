@@ -42,9 +42,11 @@ def data_provider():
 
 
 @pytest.fixture
-def rm(portfolio, data_provider):
+def rm(portfolio, data_provider, tmp_path):
     return RiskManager(
-        _make_config(), portfolio_manager=portfolio, data_provider=data_provider
+        _make_config(COOLOFF_FILE=str(tmp_path / "cooloffs.json")),
+        portfolio_manager=portfolio,
+        data_provider=data_provider,
     )
 
 
@@ -151,13 +153,14 @@ class TestDailyLossLimit:
         assert rm._check_daily_symbol_loss_limit("UMXMUSDT") is True
 
     def test_blocks_on_pnl_floor(self, rm, portfolio):
-        rm.config["SYMBOL_DAILY_LOSS_LIMIT_USDT"] = -20.0
+        # TRADE_TOTAL=300 in fixture -> -4% floor = -12 USDT
+        rm.config["SYMBOL_DAILY_LOSS_LIMIT_PCT"] = 4.0
         portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(
-            1, -21.0
+            1, -13.0
         )
         assert rm._check_daily_symbol_loss_limit("UMXMUSDT") is False
         portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(
-            1, -15.0
+            1, -10.0
         )
         assert rm._check_daily_symbol_loss_limit("UMXMUSDT") is True
 

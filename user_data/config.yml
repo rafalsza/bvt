@@ -31,9 +31,9 @@ trading_options:
   COOLOFF_MULTIPLIER_LOSS: 2
   COOLOFF_MULTIPLIER_SMALL_PROFIT: 1.5
   # stop buying a coin that keeps losing today (sells never blocked):
-  # >= 3 losing trades OR <= -20 USDT net realized P&L that day
+  # >= 3 losing trades OR net realized P&L <= -4% of TRADE_TOTAL
   MAX_LOSSES_PER_SYMBOL_PER_DAY: 3
-  SYMBOL_DAILY_LOSS_LIMIT_USDT: -20
+  SYMBOL_DAILY_LOSS_LIMIT_PCT: 4
   CUSTOM_LIST: true
   # CoinGecko market-cap-ranked list size (refreshed every 6h by importer)
   TICKERS_NUMBER: 300

@@ -31,7 +31,9 @@ class RiskManager:
         # Cooloff tracking - persisted so restarts/deploys don't erase
         # post-sell cooloffs and allow instant rebuys of the same coin.
         self.position_cooloff = {}
-        self._cooloff_file = os.path.join(user_data_path, "cooloffs.json")
+        self._cooloff_file = config.get(
+            "COOLOFF_FILE", os.path.join(user_data_path, "cooloffs.json")
+        )
         self._load_cooloffs()
         self.last_trade_times = {}
 
@@ -116,16 +118,23 @@ class RiskManager:
     def _check_daily_symbol_loss_limit(self, coin: str) -> bool:
         """Stop buying a coin that keeps losing today: block when it has
         >= MAX_LOSSES_PER_SYMBOL_PER_DAY losing trades OR <=
-        SYMBOL_DAILY_LOSS_LIMIT_USDT net realized P&L. Counts from
-        transactions.db so it survives restarts; both 0 = disabled."""
+        -SYMBOL_DAILY_LOSS_LIMIT_PCT % of TRADE_TOTAL in net realized P&L.
+        Counts from transactions.db so it survives restarts;
+        both 0 = disabled."""
         try:
             max_losses = int(
                 self.config.get("MAX_LOSSES_PER_SYMBOL_PER_DAY", 0) or 0
             )
-            pnl_floor = float(
-                self.config.get("SYMBOL_DAILY_LOSS_LIMIT_USDT", 0) or 0
+            pnl_floor_pct = float(
+                self.config.get("SYMBOL_DAILY_LOSS_LIMIT_PCT", 0) or 0
             )
-            if max_losses <= 0 and pnl_floor >= 0:
+            trade_total = getattr(
+                self.portfolio_manager, "TRADE_TOTAL", self.TRADE_TOTAL
+            )
+            if not isinstance(trade_total, (int, float)):
+                trade_total = self.TRADE_TOTAL
+            pnl_floor = -pnl_floor_pct / 100 * trade_total
+            if max_losses <= 0 and pnl_floor_pct <= 0:
                 return True
             if not self.portfolio_manager or not getattr(
                 self.portfolio_manager, "db_interface", None
