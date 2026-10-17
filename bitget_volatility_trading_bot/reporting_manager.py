@@ -20,7 +20,11 @@ class ReportingManager:
     def initialize_session_stats(self):
         """Initialize session statistics."""
         try:
-            self.session_start_time = datetime.now()
+            # Session = calendar day, so P&L stays consistent across
+            # restarts/deploys instead of resetting to zero each boot.
+            self.session_start_time = datetime.now().replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
             self.session_stats = {
                 "trades_executed": 0,
                 "profit_total": 0,
