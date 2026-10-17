@@ -30,9 +30,10 @@ trading_options:
   COOLOFF_BASE_MINUTES: 15
   COOLOFF_MULTIPLIER_LOSS: 2
   COOLOFF_MULTIPLIER_SMALL_PROFIT: 1.5
-  # max buys of the same symbol per calendar day (0 = disabled) -
-  # repeated rebuys of a fading pump bleed through stacked SLs
-  MAX_TRADES_PER_SYMBOL_PER_DAY: 3
+  # stop buying a coin that keeps losing today (sells never blocked):
+  # >= 3 losing trades OR <= -20 USDT net realized P&L that day
+  MAX_LOSSES_PER_SYMBOL_PER_DAY: 3
+  SYMBOL_DAILY_LOSS_LIMIT_USDT: -20
   CUSTOM_LIST: true
   # CoinGecko market-cap-ranked list size (refreshed every 6h by importer)
   TICKERS_NUMBER: 300

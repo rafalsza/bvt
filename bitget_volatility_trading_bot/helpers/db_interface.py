@@ -460,22 +460,28 @@ class DbInterface:
                 "worst_trade": 0,
             }
 
-    def count_trades_since(self, symbol: str, since) -> int:
-        """Count transactions (open or closed) for a symbol since a datetime."""
+    def get_symbol_day_stats(self, symbol: str, since) -> Dict[str, Any]:
+        """Losing-trade count and net realized P&L for a symbol since `since`."""
         try:
             query = db.text(
                 """
-                SELECT COUNT(*) FROM transactions
-                WHERE symbol = :symbol AND buy_time >= :since
+                SELECT
+                    COALESCE(SUM(CASE WHEN profit_dollars < 0 THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(profit_dollars), 0)
+                FROM transactions
+                WHERE symbol = :symbol AND closed = 1 AND sell_time >= :since
                 """
             )
             result = self.connection.execute(
                 query, {"symbol": symbol, "since": since}
             ).fetchone()
-            return int(result[0] if result else 0)
+            return {
+                "losing_trades": int(result[0] or 0),
+                "realized_pnl": float(result[1] or 0.0),
+            }
         except Exception as e:
-            logger.error(f"💥 Error counting trades for {symbol}: {e}")
-            return 0
+            logger.error(f"💥 Error getting day stats for {symbol}: {e}")
+            return {"losing_trades": 0, "realized_pnl": 0.0}
 
     def get_trading_history(
         self, limit: int = 100, symbol: str = None

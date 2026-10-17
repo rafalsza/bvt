@@ -131,27 +131,48 @@ class TestCooloff:
         assert rm._check_cooloff_period("BTCUSDT") is True
 
 
-class TestDailyTradeCap:
-    def test_cap_disabled_by_default(self, rm, portfolio):
-        assert rm._check_daily_symbol_trade_cap("BTCUSDT") is True
-        portfolio.db_interface.count_trades_since.assert_not_called()
+class TestDailyLossLimit:
+    def _stats(self, losses, pnl):
+        return {"losing_trades": losses, "realized_pnl": pnl}
 
-    def test_cap_blocks_after_n_trades(self, rm, portfolio):
-        rm.config["MAX_TRADES_PER_SYMBOL_PER_DAY"] = 3
-        portfolio.db_interface.count_trades_since.return_value = 3
-        assert rm._check_daily_symbol_trade_cap("UMXMUSDT") is False
-        portfolio.db_interface.count_trades_since.return_value = 2
-        assert rm._check_daily_symbol_trade_cap("UMXMUSDT") is True
+    def test_disabled_by_default(self, rm, portfolio):
+        assert rm._check_daily_symbol_loss_limit("BTCUSDT") is True
+        portfolio.db_interface.get_symbol_day_stats.assert_not_called()
 
-    def test_cap_blocks_buy_in_validate_signals(self, rm, portfolio):
-        rm.config["MAX_TRADES_PER_SYMBOL_PER_DAY"] = 1
-        portfolio.db_interface.count_trades_since.return_value = 1
-        signals = {"UMXMUSDT": {"buy_signal": "x"}}
-        assert rm.validate_signals(signals) == {}
+    def test_blocks_after_n_losses(self, rm, portfolio):
+        rm.config["MAX_LOSSES_PER_SYMBOL_PER_DAY"] = 3
+        portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(
+            3, -10.0
+        )
+        assert rm._check_daily_symbol_loss_limit("UMXMUSDT") is False
+        portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(
+            2, -10.0
+        )
+        assert rm._check_daily_symbol_loss_limit("UMXMUSDT") is True
 
-    def test_cap_does_not_block_sells(self, rm, portfolio):
-        rm.config["MAX_TRADES_PER_SYMBOL_PER_DAY"] = 1
-        portfolio.db_interface.count_trades_since.return_value = 99
+    def test_blocks_on_pnl_floor(self, rm, portfolio):
+        rm.config["SYMBOL_DAILY_LOSS_LIMIT_USDT"] = -20.0
+        portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(
+            1, -21.0
+        )
+        assert rm._check_daily_symbol_loss_limit("UMXMUSDT") is False
+        portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(
+            1, -15.0
+        )
+        assert rm._check_daily_symbol_loss_limit("UMXMUSDT") is True
+
+    def test_blocks_buy_in_validate_signals(self, rm, portfolio):
+        rm.config["MAX_LOSSES_PER_SYMBOL_PER_DAY"] = 1
+        portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(
+            1, -5.0
+        )
+        assert rm.validate_signals({"UMXMUSDT": {"buy_signal": "x"}}) == {}
+
+    def test_does_not_block_sells(self, rm, portfolio):
+        rm.config["MAX_LOSSES_PER_SYMBOL_PER_DAY"] = 1
+        portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(
+            9, -99.0
+        )
         portfolio.get_portfolio_summary.return_value["active_positions"] = 1
         signals = {"UMXMUSDT": {"sell_signal": "x"}}
         assert "UMXMUSDT" in rm.validate_signals(signals)
