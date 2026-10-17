@@ -18,7 +18,9 @@ class BitgetTickerImporter:
         self.tickers_file = f"tickerlists/tickers_bitget_{self.pair_with}.txt"
         self.time_to_wait = 360
         self.request_delay = 1.0
-        self.tickers_number = 100
+        self.tickers_number = int(
+            self.config_manager.get_config_value("TICKERS_NUMBER") or 300
+        )
 
     def get_bitget_symbols(self) -> set:
         """Get active Bitget trading symbols."""

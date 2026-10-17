@@ -16,12 +16,14 @@ script_options:
 trading_options:
   CHANGE_IN_PRICE: 2.5
   # 24h quote-volume gate (USDT) calibrated for Bitget spot scale:
-  # majors are ~10-250M; <0.3M = dead/stable pairs that produce fake pumps.
+  # majors are ~10-250M; <0.3-0.5M = dead/stable pairs that produce fake pumps.
   COINS_MAX_VOLUME: 50000000000
-  COINS_MIN_VOLUME: 1000000
+  COINS_MIN_VOLUME: 500000
   COOLOFF_MULTIPLIER_LOSS: 2
   COOLOFF_MULTIPLIER_SMALL_PROFIT: 1.5
   CUSTOM_LIST: true
+  # CoinGecko market-cap-ranked list size (refreshed every 6h by importer)
+  TICKERS_NUMBER: 300
   CUSTOM_LIST_AUTORELOAD: false
   FIATS:
   - EURUSDT
