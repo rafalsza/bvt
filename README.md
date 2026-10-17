@@ -10,7 +10,7 @@ The bot listens to price changes on Bitget spot. By default it only picks USDT p
 
 - Every ~10s cycle the bot snapshots all prices in one REST call; a coin that moved more than **2.5%** over the last 18 snapshots (~3 minutes) (`CHANGE_IN_PRICE`, `TIME_DIFFERENCE` x `RECHECK_INTERVAL`) triggers a buy
 - Position size: `TRADE_TOTAL` USDT, up to `TRADE_SLOTS` concurrent positions
-- Exits: base **SL -3%** / **TP +5%**; once price is up **+1%** (`TRAILING_TAKE_PROFIT`) a **1%** trailing stop (`TRAILING_STOP_LOSS`) takes over
+- Exits: base **SL -3%**; trailing arms once position is up **+5%** (`TAKE_PROFIT`), then rides the peak: sells on a **-1%** retrace from max (`TRAILING_STOP_LOSS`) or on a +1% spike above the previous peak (`TRAILING_TAKE_PROFIT`)
 - Adaptive cooloff after each sell; session-level TP/SL guard rails
 - Taker fee modelled at **0.1%** per side (Bitget standard spot fee; 0.08% if paying fees in BGB - update `TRADING_FEE` accordingly)
 

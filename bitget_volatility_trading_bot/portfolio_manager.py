@@ -354,7 +354,9 @@ class PortfolioManager:
                     self._set_post_sell_cooloff(symbol, sell_result)
                     continue
 
-                if tsl_enabled and not self.config.get("SESSION_TPSL_OVERRIDE", False):
+                # Session TP/SL override is a portfolio-level kill switch only;
+                # it must not disable per-position trailing exits.
+                if tsl_enabled:
                     if not ttp_tsl_active:
                         base_tp_price = entry_price_plus_fees * (
                             1 + base_tp_percent / 100
