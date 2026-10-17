@@ -1,7 +1,11 @@
 # risk_manager.py
+import json
+import os
 from datetime import datetime, timedelta
 from typing import Dict, Any
 from loguru import logger
+
+from globals import user_data_path
 
 
 class RiskManager:
@@ -24,8 +28,11 @@ class RiskManager:
         self.TRADE_TOTAL = float(config.get("TRADE_TOTAL"))
         self.TIME_DIFFERENCE = config.get("TIME_DIFFERENCE")
 
-        # Cooloff tracking
+        # Cooloff tracking - persisted so restarts/deploys don't erase
+        # post-sell cooloffs and allow instant rebuys of the same coin.
         self.position_cooloff = {}
+        self._cooloff_file = os.path.join(user_data_path, "cooloffs.json")
+        self._load_cooloffs()
         self.last_trade_times = {}
 
         logger.info("⚖️ Risk manager initialized")
@@ -301,11 +308,49 @@ class RiskManager:
 
             cooloff_end = datetime.now() + timedelta(minutes=minutes)
             self.position_cooloff[coin] = cooloff_end
+            self._save_cooloffs()
 
             logger.debug(f"⏰ Cooloff set for {coin}: {minutes} minutes")
 
         except Exception as e:
             logger.error(f"💥 Error setting cooloff for {coin}: {e}")
+
+    def _load_cooloffs(self):
+        """Restore cooloffs from disk, dropping already-expired entries."""
+        try:
+            with open(self._cooloff_file, "r") as f:
+                raw = json.load(f)
+            now = datetime.now()
+            for coin, end_iso in raw.items():
+                try:
+                    end = datetime.fromisoformat(end_iso)
+                    if end > now:
+                        self.position_cooloff[coin] = end
+                except (TypeError, ValueError):
+                    continue
+            if self.position_cooloff:
+                logger.info(
+                    f"⏰ Restored {len(self.position_cooloff)} active cooloffs"
+                )
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        except Exception as e:
+            logger.error(f"💥 Error loading cooloffs: {e}")
+
+    def _save_cooloffs(self):
+        """Persist cooloffs; drop expired entries while writing."""
+        try:
+            now = datetime.now()
+            self.position_cooloff = {
+                c: end for c, end in self.position_cooloff.items() if end > now
+            }
+            with open(self._cooloff_file, "w") as f:
+                json.dump(
+                    {c: end.isoformat() for c, end in self.position_cooloff.items()},
+                    f,
+                )
+        except Exception as e:
+            logger.error(f"💥 Error saving cooloffs: {e}")
 
     def set_adaptive_cooloff(self, coin: str, trade_result: str):
         """
@@ -391,6 +436,7 @@ class RiskManager:
             self.session_profit = 0
             self.session_loss = 0
             self.position_cooloff.clear()
+            self._save_cooloffs()
             self.last_trade_times.clear()
 
             logger.info("⚖️ Session statistics reset")
