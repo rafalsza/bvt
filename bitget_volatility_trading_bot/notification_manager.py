@@ -249,10 +249,17 @@ class NotificationManager:
 
         if side == "BUY":
             signal = trade_data.get("signal", "")
+            sig_emoji = "🔻" if signal == "volatility_drop" else "⚡"
+            range_pct = trade_data.get("range_pct")
+            range_text = (
+                f" (range {range_pct:+.2f}%)"
+                if isinstance(range_pct, (int, float))
+                else ""
+            )
             return (
                 f"🟢 *BUY* `{symbol}`\n"
                 f"`{total:.2f} {self.pair_with}` @ `{price}` · {quantity} units\n"
-                f"⚡ `{signal}`{gain_text}\n"
+                f"{sig_emoji} `{signal}`{gain_text}{range_text}\n"
                 f"🕒 {self._get_current_time()}"
             )
 

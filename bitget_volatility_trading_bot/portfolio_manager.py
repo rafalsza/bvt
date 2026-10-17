@@ -163,6 +163,7 @@ class PortfolioManager:
                 "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "signal": signal.get("buy_signal", "unknown"),
                 "gain": signal.get("gain"),
+                "range_pct": signal.get("range_pct"),
             }
             self.notification_manager.send_trade_notification(trade_data)
 

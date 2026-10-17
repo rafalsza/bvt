@@ -362,18 +362,26 @@ class DataProvider:
                     ):
                         continue
 
+                    # Directional move (signed, first -> last snapshot) tells
+                    # pump apart from dump - the unsigned range alone cannot.
+                    directional = self._directional_change(symbol)
+
                     volatile_coins[symbol] = {
                         "buy_signal": (
                             "volatility_gain"
-                            if price_change > 0
+                            if directional >= 0
                             else "volatility_drop"
                         ),
                         "value": 1,
-                        "gain": round(price_change, 3),
+                        "gain": round(directional, 3),
+                        "range_pct": round(price_change, 3),
                     }
 
                     logger.info(
-                        f"🎯 Volatility detected: {symbol} +{price_change:.3f}%"
+                        f"🎯 Volatility detected: {symbol} "
+                        f"range {price_change:+.3f}% "
+                        f"(move {directional:+.3f}% "
+                        f"{'↑' if directional >= 0 else '↓'})"
                     )
 
                 except Exception as e:

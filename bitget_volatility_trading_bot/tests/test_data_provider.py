@@ -132,12 +132,14 @@ class TestVolatilityDetection:
         assert signals["BTCUSDT"]["gain"] == pytest.approx(5.0, abs=0.01)
 
     def test_detects_drop_as_signal(self, dp):
-        # change is min/max based so it is unsigned; a drop still flags
-        # volatility but reports as a gain magnitude
+        # a drop still triggers volatility but is now labelled and signed
+        # as a drop, not a fake gain
         self._feed_prices(dp, {"BTCUSDT": 105.0}, {"BTCUSDT": 100.0})
         signals = dp._detect_volatility()
         assert "BTCUSDT" in signals
-        assert signals["BTCUSDT"]["buy_signal"] == "volatility_gain"
+        assert signals["BTCUSDT"]["buy_signal"] == "volatility_drop"
+        assert signals["BTCUSDT"]["gain"] == pytest.approx(-4.76, abs=0.01)
+        assert signals["BTCUSDT"]["range_pct"] == pytest.approx(5.0, abs=0.01)
 
     def test_below_threshold_no_signal(self, dp):
         self._feed_prices(dp, {"BTCUSDT": 100.0}, {"BTCUSDT": 101.0})
