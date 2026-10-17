@@ -36,3 +36,6 @@ _*.txt
 .venv-bt/
 backtest/data/
 backtest/report/
+
+# tick data snapshots (volume-mounted, can be large)
+user_data/snapshots/

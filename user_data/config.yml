@@ -18,6 +18,9 @@ trading_options:
   # min signed move (first->last snapshot in the window) for a signal -
   # range alone also fires on drops or fully retraced pumps (+0.00% gain)
   MIN_NET_GAIN_PCT: 1.0
+  # record every ~10s price snapshot to user_data/snapshots/*.csv.gz
+  # (~20MB/day) - real tick data for later backtest/optimization
+  SNAPSHOT_RECORD: true
   # 24h quote-volume gate (USDT) calibrated for Bitget spot scale:
   # majors are ~10-250M; <0.3-0.5M = dead/stable pairs that produce fake pumps.
   COINS_MAX_VOLUME: 50000000000

@@ -1,10 +1,13 @@
 # data_provider.py
 import os
+import csv
+import gzip
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from loguru import logger
 from helpers.bitget_client import BitgetClient
 from external_signal_manager import ExternalSignalManager
+from globals import user_data_path
 
 
 class DataProvider:
@@ -57,6 +60,14 @@ class DataProvider:
         # Symbols that must always be priced regardless of list filters
         # (open positions - PortfolioManager keeps this in sync)
         self.pinned_symbols = set()
+
+        # Optional recorder: dump every price snapshot to a daily CSV so
+        # real tick data can feed backtests later (exactly what the
+        # detector sees, ~10s resolution).
+        self.SNAPSHOT_RECORD = config.get("SNAPSHOT_RECORD", False)
+        self._snapshot_dir = config.get(
+            "SNAPSHOT_DIR", os.path.join(user_data_path, "snapshots")
+        )
 
         # Load custom tickers if enabled
         self.tickers = []
@@ -231,12 +242,39 @@ class DataProvider:
             # Store prices at current position
             self.historical_prices[self.hsp_head] = prices
 
+            self._record_snapshot(prices)
+
             logger.debug(
                 f"📈 Added prices to historical data at position {self.hsp_head}"
             )
 
         except Exception as e:
             logger.error(f"💥 Failed to add to historical data: {e}")
+
+    def _record_snapshot(self, prices: Dict[str, Dict[str, Any]]):
+        """Append a price snapshot to today's CSV in user_data/snapshots."""
+        if not self.SNAPSHOT_RECORD or not prices:
+            return
+        try:
+            os.makedirs(self._snapshot_dir, exist_ok=True)
+            now = datetime.now()
+            path = os.path.join(
+                self._snapshot_dir, f"snapshots_{now:%Y%m%d}.csv.gz"
+            )
+            write_header = not os.path.exists(path)
+            ts = now.isoformat(timespec="milliseconds")
+            with gzip.open(path, "at", newline="") as f:
+                writer = csv.writer(f)
+                if write_header:
+                    writer.writerow(
+                        ["ts", "symbol", "price", "volume", "change_24h"]
+                    )
+                for symbol, d in prices.items():
+                    writer.writerow(
+                        [ts, symbol, d["price"], d.get("volume"), d.get("change_24h")]
+                    )
+        except Exception as e:
+            logger.error(f"💥 Snapshot record failed: {e}")
 
     def _directional_change(self, symbol: str) -> float:
         """Percent change oldest -> newest snapshot in the buffer (signed)."""
