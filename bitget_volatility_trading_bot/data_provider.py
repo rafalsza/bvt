@@ -364,7 +364,12 @@ class DataProvider:
 
                     # Directional move (signed, first -> last snapshot) tells
                     # pump apart from dump - the unsigned range alone cannot.
+                    # A coin that pumped AND fully retraced inside the window
+                    # (net ~0%) is a bad entry - the wave is over.
                     directional = self._directional_change(symbol)
+                    min_net = self.config.get("MIN_NET_GAIN_PCT", 1.0)
+                    if directional < min_net:
+                        continue
 
                     volatile_coins[symbol] = {
                         "buy_signal": (

@@ -15,6 +15,9 @@ script_options:
   UTA_MODE: true
 trading_options:
   CHANGE_IN_PRICE: 2.5
+  # min signed move (first->last snapshot in the window) for a signal -
+  # range alone also fires on drops or fully retraced pumps (+0.00% gain)
+  MIN_NET_GAIN_PCT: 1.0
   # 24h quote-volume gate (USDT) calibrated for Bitget spot scale:
   # majors are ~10-250M; <0.3-0.5M = dead/stable pairs that produce fake pumps.
   COINS_MAX_VOLUME: 50000000000

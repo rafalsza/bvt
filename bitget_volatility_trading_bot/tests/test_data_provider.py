@@ -131,15 +131,34 @@ class TestVolatilityDetection:
         assert signals["BTCUSDT"]["buy_signal"] == "volatility_gain"
         assert signals["BTCUSDT"]["gain"] == pytest.approx(5.0, abs=0.01)
 
-    def test_detects_drop_as_signal(self, dp):
-        # a drop still triggers volatility but is now labelled and signed
-        # as a drop, not a fake gain
+    def test_drop_is_blocked_by_min_net_gain(self, dp):
+        # unsigned range still trips the detector, but a downward move
+        # fails the MIN_NET_GAIN_PCT gate and produces no signal
         self._feed_prices(dp, {"BTCUSDT": 105.0}, {"BTCUSDT": 100.0})
+        assert dp._detect_volatility() == {}
+
+    def test_fully_retraced_pump_blocked(self, dp):
+        # pump +2.5% then back to start: range trips the trigger but the
+        # wave is already over - net ~0% must not produce a signal
+        self._feed_prices(
+            dp,
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 103.6},
+            {"BTCUSDT": 100.0},
+        )
+        assert dp._detect_volatility() == {}
+
+    def test_v_shape_bounce_passes(self, dp):
+        # dip then recovery above start = live bounce, still tradeable
+        self._feed_prices(
+            dp,
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 97.0},
+            {"BTCUSDT": 102.0},
+        )
         signals = dp._detect_volatility()
         assert "BTCUSDT" in signals
-        assert signals["BTCUSDT"]["buy_signal"] == "volatility_drop"
-        assert signals["BTCUSDT"]["gain"] == pytest.approx(-4.76, abs=0.01)
-        assert signals["BTCUSDT"]["range_pct"] == pytest.approx(5.0, abs=0.01)
+        assert signals["BTCUSDT"]["buy_signal"] == "volatility_gain"
 
     def test_below_threshold_no_signal(self, dp):
         self._feed_prices(dp, {"BTCUSDT": 100.0}, {"BTCUSDT": 101.0})
