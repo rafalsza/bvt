@@ -95,8 +95,11 @@ trading_options:
   RECHECK_INTERVAL: 18
   REINVEST_PROFITS: true
   SELL_ON_SIGNAL_ONLY: false
+  # daily risk guard: -2% session loss stops the bot; TP set to 100%
+  # because backtest PnL is dominated by extreme-volatility days that
+  # a 5% cap would cut off mid-run
   SESSION_STOP_LOSS: -2
-  SESSION_TAKE_PROFIT: 5
+  SESSION_TAKE_PROFIT: 100
   SESSION_TPSL_OVERRIDE: true
   SIGNALLING_MODULES:
   - import_bitget_tickers_coingecko
