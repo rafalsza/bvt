@@ -19,6 +19,9 @@ trading_options:
   # majors are ~10-250M; <0.3-0.5M = dead/stable pairs that produce fake pumps.
   COINS_MAX_VOLUME: 50000000000
   COINS_MIN_VOLUME: 200000
+  # post-sell cooloff base in minutes; result multipliers apply on top
+  # (LOSS x2 -> 30 min, SMALL_PROFIT x1.5 -> ~22 min, else 15 min)
+  COOLOFF_BASE_MINUTES: 15
   COOLOFF_MULTIPLIER_LOSS: 2
   COOLOFF_MULTIPLIER_SMALL_PROFIT: 1.5
   CUSTOM_LIST: true

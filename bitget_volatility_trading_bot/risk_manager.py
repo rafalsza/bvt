@@ -295,7 +295,9 @@ class RiskManager:
         """
         try:
             if minutes is None:
-                minutes = self.TIME_DIFFERENCE
+                minutes = self.config.get(
+                    "COOLOFF_BASE_MINUTES", self.TIME_DIFFERENCE
+                )
 
             cooloff_end = datetime.now() + timedelta(minutes=minutes)
             self.position_cooloff[coin] = cooloff_end
@@ -314,7 +316,9 @@ class RiskManager:
             trade_result: Result of the trade ("LOSS", "SMALL_PROFIT", "PROFIT", etc.)
         """
         try:
-            base_cooloff = self.TIME_DIFFERENCE
+            base_cooloff = self.config.get(
+                "COOLOFF_BASE_MINUTES", self.TIME_DIFFERENCE
+            )
             loss_multiplier = self.config.get("COOLOFF_MULTIPLIER_LOSS", 2)
             small_profit_multiplier = self.config.get(
                 "COOLOFF_MULTIPLIER_SMALL_PROFIT", 1.5
