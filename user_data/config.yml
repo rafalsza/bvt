@@ -6,10 +6,11 @@ script_options:
   LOG_FILE: trades.txt
   LOG_TRADES: false
   MSG_TELEGRAM: true
-  # Telegram portfolio heartbeat (cycles ~= minutes): with open positions /
-  # while idle. Trade, error and session notifications are always immediate.
-  REPORT_ACTIVE_CYCLES: 30
-  REPORT_IDLE_CYCLES: 240
+  # Telegram portfolio heartbeat in cycles (cycle_interval=10s):
+  # 180 ~= 30min with open positions, 1440 ~= 4h while idle.
+  # Trade, error and session notifications are always immediate.
+  REPORT_ACTIVE_CYCLES: 180
+  REPORT_IDLE_CYCLES: 1440
   TEST_MODE: true
   UTA_MODE: true
 trading_options:
@@ -67,7 +68,11 @@ trading_options:
   MIN_POSITIONS_CONCENTRATION: 3
   PAIR_WITH: USDT
   PERFORMANCE_RISK_THRESHOLD: -15
-  RECHECK_INTERVAL: 3
+  # ~10s main-loop cadence (was 60s) - faster entries and trailing exits
+  cycle_interval: 10
+  # price snapshots kept for the detector window:
+  # TIME_DIFFERENCE x RECHECK_INTERVAL x cycle_interval ~= 3 min
+  RECHECK_INTERVAL: 18
   REINVEST_PROFITS: true
   SELL_ON_SIGNAL_ONLY: false
   SESSION_STOP_LOSS: -2
