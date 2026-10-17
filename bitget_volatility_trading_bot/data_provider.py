@@ -42,6 +42,18 @@ class DataProvider:
         self.COINS_MIN_VOLUME = config.get("COINS_MIN_VOLUME", 0)
         self.COINS_MAX_VOLUME = config.get("COINS_MAX_VOLUME", float("inf"))
 
+        # Market regime filter: block new buys when the reference asset
+        # (default BTC) is in a fast drop or a broad 24h downtrend.
+        self.MARKET_FILTER_ENABLED = config.get("MARKET_FILTER_ENABLED", False)
+        self.MARKET_FILTER_SYMBOL = config.get(
+            "MARKET_FILTER_SYMBOL", f"BTC{self.PAIR_WITH}"
+        )
+        self.MARKET_MAX_24H_DROP_PCT = config.get("MARKET_MAX_24H_DROP_PCT", -3.0)
+        self.MARKET_MAX_WINDOW_DROP_PCT = config.get(
+            "MARKET_MAX_WINDOW_DROP_PCT", -1.5
+        )
+        self._market_blocked = False
+
         # Symbols that must always be priced regardless of list filters
         # (open positions - PortfolioManager keeps this in sync)
         self.pinned_symbols = set()
@@ -167,6 +179,9 @@ class DataProvider:
                 filtered_prices[symbol] = {
                     "price": float(ticker["price"]),
                     "volume": float(ticker.get("volume") or 0),
+                    "change_24h": (
+                        float(ticker["pct"]) if ticker.get("pct") else None
+                    ),
                     "time": datetime.now(),
                 }
 
@@ -182,8 +197,9 @@ class DataProvider:
         Returns:
             bool: True if symbol should be included
         """
-        # Open positions must always be priced, even outside the ticker list
-        if symbol in self.pinned_symbols:
+        # Market reference and open positions must always be priced,
+        # even outside the ticker list
+        if symbol in self.pinned_symbols or symbol == self.MARKET_FILTER_SYMBOL:
             return True
 
         # Check if symbol contains any excluded fiat pairs
@@ -222,9 +238,64 @@ class DataProvider:
         except Exception as e:
             logger.error(f"💥 Failed to add to historical data: {e}")
 
+    def _directional_change(self, symbol: str) -> float:
+        """Percent change oldest -> newest snapshot in the buffer (signed)."""
+        try:
+            first_price = last_price = None
+            for price_data in self.historical_prices:
+                if price_data and symbol in price_data:
+                    p = float(price_data[symbol]["price"])
+                    if first_price is None:
+                        first_price = p
+                    last_price = p
+            if first_price and first_price > 0 and last_price is not None:
+                return (last_price - first_price) / first_price * 100
+        except Exception as e:
+            logger.debug(f"⚠️ Error computing directional change for {symbol}: {e}")
+        return 0.0
+
+    def _market_allows_buys(self, current_prices: Dict[str, Dict[str, Any]]) -> bool:
+        """Block new buys while the market reference (BTC) is dropping fast
+        or sitting in a broad 24h downtrend. Missing data never blocks."""
+        if not self.MARKET_FILTER_ENABLED:
+            return True
+
+        ref = current_prices.get(self.MARKET_FILTER_SYMBOL)
+        if not ref:
+            return True
+
+        reasons = []
+        pct_24h = ref.get("change_24h")
+        if pct_24h is not None and pct_24h <= self.MARKET_MAX_24H_DROP_PCT:
+            reasons.append(f"24h change {pct_24h:.2f}%")
+
+        window_change = self._directional_change(self.MARKET_FILTER_SYMBOL)
+        if window_change <= self.MARKET_MAX_WINDOW_DROP_PCT:
+            reasons.append(f"window change {window_change:.2f}%")
+
+        blocked = bool(reasons)
+        if blocked and not self._market_blocked:
+            logger.warning(
+                f"🌧️ Market filter ON: {self.MARKET_FILTER_SYMBOL} "
+                + ", ".join(reasons)
+                + " - new buy signals blocked"
+            )
+        elif not blocked and self._market_blocked:
+            logger.info(
+                f"🌤️ Market filter OFF: {self.MARKET_FILTER_SYMBOL} "
+                f"recovered - buy signals allowed"
+            )
+        self._market_blocked = blocked
+        return not blocked
+
     def get_trading_signals(self) -> Dict[str, Dict[str, Any]]:
         """Get trading signals including external signals."""
         try:
+            current = self.historical_prices[self.hsp_head] if self.hsp_head >= 0 else {}
+            if not self._market_allows_buys(current):
+                logger.debug("🌧️ Market filter active - skipping signal generation")
+                return {}
+
             # Get volatility signals
             volatile_coins = self._detect_volatility()
 

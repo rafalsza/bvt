@@ -145,6 +145,7 @@ class BitgetClient:
                             "symbol": self._from_ccxt_symbol(unified),
                             "price": str(price),
                             "volume": str(ticker.get("quoteVolume") or 0),
+                            "pct": str(ticker.get("percentage") or 0),
                         }
                     )
             return result

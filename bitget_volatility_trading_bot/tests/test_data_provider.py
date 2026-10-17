@@ -194,6 +194,68 @@ class TestVolatilityDetection:
         assert "BTCUSDT" in dp._detect_volatility()
 
 
+class TestMarketFilter:
+    def _mk(self, client, **cfg):
+        with patch("data_provider.ExternalSignalManager") as esm:
+            provider = DataProvider(client, _make_config(**cfg))
+            provider.external_signal_manager = esm.return_value
+            provider.external_signal_manager.get_external_signals.return_value = {}
+            return provider
+
+    def _feed(self, dp, snaps):
+        dp.initialize_historical_data()
+        now = datetime.now()
+        for snap in snaps:
+            dp._add_to_historical({s: dict(d, time=now) for s, d in snap.items()})
+
+    def test_btc_24h_downtrend_blocks_signals(self, client):
+        dp = self._mk(client, MARKET_FILTER_ENABLED=True)
+        self._feed(dp, [
+            {"BTCUSDT": {"price": 100.0, "change_24h": -4.0},
+             "PUMPUSDT": {"price": 1.0}},
+            {"BTCUSDT": {"price": 100.5, "change_24h": -4.1},
+             "PUMPUSDT": {"price": 1.1}},
+        ])
+        assert dp.get_trading_signals() == {}
+
+    def test_btc_window_panic_blocks_signals(self, client):
+        dp = self._mk(client, MARKET_FILTER_ENABLED=True)
+        self._feed(dp, [
+            {"BTCUSDT": {"price": 100.0, "change_24h": 0.5}},
+            {"BTCUSDT": {"price": 98.0, "change_24h": 0.5}},
+        ])
+        assert dp.get_trading_signals() == {}
+
+    def test_healthy_market_allows_signals(self, client):
+        dp = self._mk(client, MARKET_FILTER_ENABLED=True)
+        self._feed(dp, [
+            {"BTCUSDT": {"price": 100.0, "change_24h": 0.5},
+             "PUMPUSDT": {"price": 1.0, "volume": 1e9}},
+            {"BTCUSDT": {"price": 100.2, "change_24h": 0.6},
+             "PUMPUSDT": {"price": 1.1, "volume": 1e9}},
+        ])
+        signals = dp.get_trading_signals()
+        assert "PUMPUSDT" in signals
+
+    def test_filter_disabled_by_default(self, client):
+        dp = self._mk(client)
+        self._feed(dp, [
+            {"BTCUSDT": {"price": 100.0, "change_24h": -9.0},
+             "PUMPUSDT": {"price": 1.0, "volume": 1e9}},
+            {"BTCUSDT": {"price": 99.0, "change_24h": -9.0},
+             "PUMPUSDT": {"price": 1.1, "volume": 1e9}},
+        ])
+        assert "PUMPUSDT" in dp.get_trading_signals()
+
+    def test_missing_reference_never_blocks(self, client):
+        dp = self._mk(client, MARKET_FILTER_ENABLED=True)
+        self._feed(dp, [
+            {"PUMPUSDT": {"price": 1.0, "volume": 1e9}},
+            {"PUMPUSDT": {"price": 1.1, "volume": 1e9}},
+        ])
+        assert "PUMPUSDT" in dp.get_trading_signals()
+
+
 class TestPriceChange:
     def test_min_max_based_change(self, dp):
         dp.initialize_historical_data()
