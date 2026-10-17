@@ -22,9 +22,10 @@ trading_options:
   # majors are ~10-250M; <0.3-0.5M = dead/stable pairs that produce fake pumps.
   COINS_MAX_VOLUME: 50000000000
   COINS_MIN_VOLUME: 200000
-  # Market regime filter: no new buys when BTC is falling fast
-  # (>=1.5% in the ~3min window) or is in a 24h downtrend (<=-3%)
-  MARKET_FILTER_ENABLED: true
+  # Market regime filter DISABLED: this is a tail-event strategy -
+  # ~93% of backtest PnL came from extreme-volatility (crash) days.
+  # Blocking buys when BTC drops removes the strategy's entire edge.
+  MARKET_FILTER_ENABLED: false
   MARKET_FILTER_SYMBOL: BTCUSDT
   MARKET_MAX_24H_DROP_PCT: -3
   MARKET_MAX_WINDOW_DROP_PCT: -1.5
