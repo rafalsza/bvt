@@ -789,6 +789,8 @@ class NotificationManager:
 
             if self.bot_instance:
                 self.bot_instance.trading_paused = False
+                if hasattr(self.bot_instance, "clear_session_stop"):
+                    self.bot_instance.clear_session_stop()
                 self.bot.reply_to(
                     message,
                     "▶️ *Trading Resumed*\n\n Bot will continue normal trading operations.",

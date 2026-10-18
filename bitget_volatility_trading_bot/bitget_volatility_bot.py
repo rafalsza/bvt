@@ -1,4 +1,6 @@
 # Standard library imports
+import json
+import os
 import time
 import sys
 from pathlib import Path
@@ -121,6 +123,10 @@ class BitgetVolatilityBot:
 
             self.shutdown_requested = False
             self.trading_paused = False
+            self.session_stopped = False
+            self._session_stop_file = os.path.join(
+                user_data_path, "session_stop.json"
+            )
             self.start_time = datetime.now()
 
             # Balance-report throttling: cycles since last sent report and
@@ -290,6 +296,17 @@ class BitgetVolatilityBot:
             # Send startup notification
             self.notification_manager.send_bot_startup_notification()
 
+            # Restore session-stop latch - after a session SL/TP hit the
+            # process stays alive but idle instead of exiting (Docker
+            # restart policies would otherwise crash-loop every restart).
+            stored_date, stored_status = self._read_session_stop()
+            if stored_date == datetime.now().date().isoformat():
+                self.session_stopped = True
+                logger.warning(
+                    f"🛑 Session already stopped today ({stored_status}) - "
+                    "idling until midnight"
+                )
+
             # Main trading loop
             while self.trading_engine.is_running and not self.shutdown_requested:
                 try:
@@ -298,17 +315,20 @@ class BitgetVolatilityBot:
                         logger.info("🛑 Shutdown requested - breaking main loop")
                         break
 
-                    if not getattr(self, "trading_paused", False):
+                    # Check session limits BEFORE trading - after a restart
+                    # the check must gate the very first trading cycle too
+                    if not self.session_stopped:
+                        self._check_session_limits()
+
+                    if self._session_stop_active():
+                        pass  # session limit hit earlier today - idle
+                    elif not getattr(self, "trading_paused", False):
                         self._execute_trading_cycle()
                     else:
                         logger.debug("⏸️ Trading paused - skipping cycle")
 
                     # Generate and process reports
                     self._process_reports()
-
-                    # Check session limits and trading rules
-                    if self._check_session_limits():
-                        break
 
                     # Check shutdown flag before sleep
                     if self.shutdown_requested:
@@ -447,7 +467,12 @@ class BitgetVolatilityBot:
             )
 
             if session_status != "CONTINUE":
-                self._handle_session_limit(session_status)
+                self._handle_session_limit(
+                    session_status, report.get("session_profit", 0)
+                )
+                self._write_session_stop(
+                    session_status, report.get("session_profit", 0)
+                )
                 return True
 
             return False
@@ -455,6 +480,53 @@ class BitgetVolatilityBot:
         except Exception as e:
             logger.error(f"⚖️ Error checking session limits: {e}")
             return False
+
+    def _read_session_stop(self):
+        """Return (date_str, status) of the persisted session stop latch."""
+        try:
+            if os.path.exists(self._session_stop_file):
+                with open(self._session_stop_file) as f:
+                    data = json.load(f)
+                return data.get("date"), data.get("status", "SESSION_LIMIT")
+        except Exception as e:
+            logger.debug(f"⚠️ Could not read session stop file: {e}")
+        return None, None
+
+    def _write_session_stop(self, status: str, session_profit: float):
+        """Persist today's session stop so restarts stay idle until midnight."""
+        try:
+            with open(self._session_stop_file, "w") as f:
+                json.dump(
+                    {
+                        "date": datetime.now().date().isoformat(),
+                        "status": status,
+                        "session_profit": round(session_profit, 3),
+                    },
+                    f,
+                )
+            self.session_stopped = True
+        except Exception as e:
+            logger.error(f"💥 Could not write session stop file: {e}")
+
+    def clear_session_stop(self):
+        """Clear the session stop latch (e.g. /resume via Telegram)."""
+        self.session_stopped = False
+        try:
+            if os.path.exists(self._session_stop_file):
+                os.remove(self._session_stop_file)
+        except Exception as e:
+            logger.debug(f"⚠️ Could not remove session stop file: {e}")
+
+    def _session_stop_active(self) -> bool:
+        """True while today's latch is set; auto-clears on a new day."""
+        if not self.session_stopped:
+            return False
+        stored_date, _ = self._read_session_stop()
+        if stored_date == datetime.now().date().isoformat():
+            return True
+        self.clear_session_stop()
+        logger.info("🌅 New day - session stop cleared, trading resumed")
+        return False
 
     def _initialize_components(self):
         """
@@ -555,12 +627,15 @@ class BitgetVolatilityBot:
             logger.exception(f"💥 {error_msg}")
             raise APIConnectionError(error_msg) from e
 
-    def _handle_session_limit(self, session_status: str):
+    def _handle_session_limit(
+        self, session_status: str, session_profit: float = 0
+    ):
         """
         Handle session limit events (take profit or stop loss).
 
         Args:
             session_status (str): Type of session limit reached
+            session_profit (float): Session P&L at the time of the limit
         """
         message = f"Session limit reached: {session_status}"
         logger.warning(f"⚠️ {message}")
