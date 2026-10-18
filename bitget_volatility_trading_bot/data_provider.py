@@ -292,6 +292,23 @@ class DataProvider:
             logger.debug(f"⚠️ Error computing directional change for {symbol}: {e}")
         return 0.0
 
+    def _last_vs_max_change(self, symbol: str) -> float:
+        """Percent distance of the newest price below the window max
+        (0.0 = currently at the window high, negative = retraced)."""
+        try:
+            prices = [
+                float(price_data[symbol]["price"])
+                for price_data in self.historical_prices
+                if price_data and symbol in price_data
+            ]
+            if prices:
+                window_max = max(prices)
+                if window_max > 0:
+                    return (prices[-1] - window_max) / window_max * 100
+        except Exception as e:
+            logger.debug(f"⚠️ Error computing last-vs-max for {symbol}: {e}")
+        return 0.0
+
     def _market_allows_buys(self, current_prices: Dict[str, Dict[str, Any]]) -> bool:
         """Block new buys while the market reference (BTC) is dropping fast
         or sitting in a broad 24h downtrend. Missing data never blocks."""
@@ -408,6 +425,15 @@ class DataProvider:
                     min_net = self.config.get("MIN_NET_GAIN_PCT", 1.0)
                     if directional < min_net:
                         continue
+
+                    # Dead-cat guard: the bounce that produced the positive
+                    # net move must still be alive at signal time. Entries
+                    # well below the window max buy the retrace into a dump.
+                    near_max = self.config.get("LAST_NEAR_MAX_PCT")
+                    if near_max is not None:
+                        last_vs_max = self._last_vs_max_change(symbol)
+                        if last_vs_max < -abs(near_max):
+                            continue
 
                     volatile_coins[symbol] = {
                         "buy_signal": (

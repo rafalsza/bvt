@@ -160,6 +160,47 @@ class TestVolatilityDetection:
         assert "BTCUSDT" in signals
         assert signals["BTCUSDT"]["buy_signal"] == "volatility_gain"
 
+    def test_near_max_blocks_faded_bounce(self, client):
+        # pump +4.5% then retrace -1.9% off the window max: net is still
+        # positive (+2.5%) but the bounce already died -> dead-cat entry
+        with patch("data_provider.ExternalSignalManager"):
+            provider = DataProvider(
+                client, _make_config(LAST_NEAR_MAX_PCT=1.5)
+            )
+            provider.external_signal_manager = MagicMock()
+        self._feed_prices(
+            provider,
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 104.5},
+            {"BTCUSDT": 102.5},
+        )
+        assert provider._detect_volatility() == {}
+
+    def test_near_max_allows_shallow_retrace(self, client):
+        # same shape but last price within 0.5% of the max -> still alive
+        with patch("data_provider.ExternalSignalManager"):
+            provider = DataProvider(
+                client, _make_config(LAST_NEAR_MAX_PCT=1.5)
+            )
+            provider.external_signal_manager = MagicMock()
+        self._feed_prices(
+            provider,
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 104.5},
+            {"BTCUSDT": 104.0},
+        )
+        assert "BTCUSDT" in provider._detect_volatility()
+
+    def test_near_max_disabled_by_default(self, dp):
+        # without the config key the same faded bounce still signals
+        self._feed_prices(
+            dp,
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 104.5},
+            {"BTCUSDT": 102.5},
+        )
+        assert "BTCUSDT" in dp._detect_volatility()
+
     def test_below_threshold_no_signal(self, dp):
         self._feed_prices(dp, {"BTCUSDT": 100.0}, {"BTCUSDT": 101.0})
         assert dp._detect_volatility() == {}
