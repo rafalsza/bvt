@@ -112,8 +112,14 @@ class ReportingManager:
             float: Session profit percentage
         """
         try:
-            if not self.session_start_time:
-                return 0.0
+            # Session = calendar day - roll the start forward after midnight,
+            # otherwise a process started yesterday keeps counting old trades.
+            today_start = datetime.now().replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            if self.session_start_time != today_start:
+                self.session_start_time = today_start
+                self.session_stats["start_time"] = today_start
 
             # Get trades from current session
             session_query = db.text(
