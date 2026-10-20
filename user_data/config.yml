@@ -105,7 +105,7 @@ trading_options:
   # daily risk guard: -2% session loss stops the bot; TP set to 100%
   # because backtest PnL is dominated by extreme-volatility days that
   # a 5% cap would cut off mid-run
-  SESSION_STOP_LOSS: -2
+  SESSION_STOP_LOSS: -5
   SESSION_TAKE_PROFIT: 100
   SESSION_TPSL_OVERRIDE: true
   SIGNALLING_MODULES:
