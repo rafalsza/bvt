@@ -334,66 +334,35 @@ class NotificationManager:
         try:
             positions = self._get_positions_data(balance_data)
 
+            # Compact 5-column layout - Telegram <pre> wraps around ~45
+            # monospace chars on phones, so keep the row width tight.
             table = PrettyTable()
-            table.field_names = [
-                "Symbol",
-                "Volume",
-                "Bought At",
-                "Now At",
-                "TP %",
-                "SL %",
-                "Change %",
-                "Profit $",
-                "Time Held",
-            ]
+            table.field_names = ["Symbol", "Price", "Chg %", "P&L $", "Held"]
 
             table.padding_width = 1
-            table.border = True
-            table.junction_char = "+"
-            table.horizontal_char = "-"
-            table.vertical_char = "|"
+            table.border = False
             table.align["Symbol"] = "l"
-            table.align["Volume"] = "r"
-            table.align["Bought At"] = "r"
-            table.align["Now At"] = "r"
-            table.align["TP %"] = "r"
-            table.align["SL %"] = "r"
-            table.align["Change %"] = "l"
-            table.align["Profit $"] = "l"
-            table.align["Time Held"] = "l"
+            table.align["Price"] = "r"
+            table.align["Chg %"] = "r"
+            table.align["P&L $"] = "r"
+            table.align["Held"] = "r"
 
             rows = []
             for symbol, pos in positions.items():
-                volume = float(pos.get("volume", 0))
-                bought_at = float(pos.get("bought_at", 0))
                 now_at = float(pos.get("now_at", 0))
-                tp_pct = float(pos.get("tp_perc", 0))
-                if not pos.get("TTP_TSL"):
-                    sl_pct = -float(pos.get("sl_perc", 0))
-                else:
-                    sl_pct = float(pos.get("sl_perc", 0))
                 change_pct = float(pos.get("change_perc", 0))
                 profit_dollars = float(pos.get("profit_dollars", 0))
                 time_held = self.calculate_time_held(pos)
-
-                # No emoji inside table cells - they are double-width glyphs
-                # that misalign the monospace columns on Telegram
-                profit_str = f"{profit_dollars:+.2f}$"
-                change_str = f"{change_pct:+.2f}%"
 
                 rows.append(
                     (
                         profit_dollars,
                         [
-                            symbol[:15],
-                            f"{volume:.4f}",
-                            f"{bought_at:.5f}",
+                            symbol[:12],
                             f"{now_at:.5f}",
-                            f"{tp_pct:+.2f}%",
-                            f"{sl_pct:.2f}%",
-                            change_str,
-                            profit_str,
-                            time_held[:20],
+                            f"{change_pct:+.2f}%",
+                            f"{profit_dollars:+.2f}",
+                            time_held[:10],
                         ],
                     )
                 )
