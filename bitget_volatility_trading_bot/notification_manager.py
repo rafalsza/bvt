@@ -362,6 +362,7 @@ class NotificationManager:
             table.align["Profit $"] = "l"
             table.align["Time Held"] = "l"
 
+            rows = []
             for symbol, pos in positions.items():
                 volume = float(pos.get("volume", 0))
                 bought_at = float(pos.get("bought_at", 0))
@@ -375,27 +376,30 @@ class NotificationManager:
                 profit_dollars = float(pos.get("profit_dollars", 0))
                 time_held = self.calculate_time_held(pos)
 
-                profit_emoji = "🟢" if profit_dollars >= 0 else "🔴"
-                profit_str = f"{profit_emoji}{profit_dollars:+.2f}$".rjust(1)
-                change_emoji = "🟢" if change_pct >= 0 else "🔴"
-                change_str = f"{change_emoji}{change_pct:+.2f}%".rjust(1)
+                # No emoji inside table cells - they are double-width glyphs
+                # that misalign the monospace columns on Telegram
+                profit_str = f"{profit_dollars:+.2f}$"
+                change_str = f"{change_pct:+.2f}%"
 
-                table.add_row(
-                    [
-                        symbol[:15],
-                        f"{volume:.4f}",
-                        f"{bought_at:.5f}",
-                        f"{now_at:.5f}",
-                        f"{tp_pct:+.2f}%",
-                        f"{sl_pct:.2f}%",
-                        change_str,
-                        profit_str,
-                        time_held[:20],
-                    ]
+                rows.append(
+                    (
+                        profit_dollars,
+                        [
+                            symbol[:15],
+                            f"{volume:.4f}",
+                            f"{bought_at:.5f}",
+                            f"{now_at:.5f}",
+                            f"{tp_pct:+.2f}%",
+                            f"{sl_pct:.2f}%",
+                            change_str,
+                            profit_str,
+                            time_held[:20],
+                        ],
+                    )
                 )
 
-            table.sortby = "Profit $"
-            table.reversesort = True
+            for _, row in sorted(rows, key=lambda r: r[0], reverse=True):
+                table.add_row(row)
 
             return str(table)
 
