@@ -296,11 +296,17 @@ class NotificationManager:
             "🤖💰" if bot_profit is not None and bot_profit >= 0 else "🤖📉"
         )
 
-        is_active = (
-            not self.bot_instance.trading_paused
-            if self.bot_instance
-            else not balance_data.get("paused", False)
-        )
+        if self.bot_instance and getattr(
+            self.bot_instance, "session_stopped", False
+        ):
+            status_line = "⛔ SESSION STOPPED (daily limit - resumes at midnight)"
+        else:
+            is_active = (
+                not self.bot_instance.trading_paused
+                if self.bot_instance
+                else not balance_data.get("paused", False)
+            )
+            status_line = "🟢 ACTIVE" if is_active else "🔴 PAUSED"
 
         message = (
             f"{profit_emoji} *Portfolio Update*\n\n"
@@ -324,7 +330,7 @@ class NotificationManager:
         else:
             message += "• Bot Total Profit: `N/A`\n"
 
-        message += f"• Bot Status: `{'🟢 ACTIVE' if is_active else '🔴 PAUSED'}`\n"
+        message += f"• Bot Status: `{status_line}`\n"
 
         return message
 
@@ -598,11 +604,14 @@ class NotificationManager:
                 return
 
             if self.bot_instance:
-                status = (
-                    "🟢 Running"
-                    if not getattr(self.bot_instance, "shutdown_requested", False)
-                    else "🔴 Shutting down"
-                )
+                if getattr(self.bot_instance, "shutdown_requested", False):
+                    status = "� Shutting down"
+                elif getattr(self.bot_instance, "session_stopped", False):
+                    status = "⛔ Session stopped (daily limit)"
+                elif getattr(self.bot_instance, "trading_paused", False):
+                    status = "⏸️ Paused"
+                else:
+                    status = "🟢 Running"
 
                 # Get portfolio stats
                 portfolio_summary = (
