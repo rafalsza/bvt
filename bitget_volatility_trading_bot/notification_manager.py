@@ -119,7 +119,7 @@ class NotificationManager:
             if total_positions > 0:
                 table_message = self._format_positions_table(balance_data)
                 self._send_telegram_message(
-                    f"<pre>{table_message}</pre>", parse_mode="HTML"
+                    f"📋 *Open Positions ({total_positions})*\n\n{table_message}"
                 )
             logger.info(
                 f"📱 Balance update sent ({total_positions} open positions)"
@@ -355,12 +355,17 @@ class NotificationManager:
                 profit_dollars = float(pos.get("profit_dollars", 0))
                 time_held = self.calculate_time_held(pos)
 
+                emoji = "🟢" if profit_dollars >= 0 else "🔴"
+                bought_text = self._fmt_price(bought_at)
+                now_text = self._fmt_price(now_at)
+                vol_text = self._fmt_qty(volume)
+
                 rows.append(
                     (
                         profit_dollars,
-                        f"{symbol} {change_pct:+.2f}% {profit_dollars:+.2f}$\n"
-                        f"{bought_at:.5f} -> {now_at:.5f} x{volume:.2f}\n"
-                        f"TP {tp_pct:+.2f}% SL {sl_pct:.2f}% held {time_held}",
+                        f"{emoji} `{symbol}` *{change_pct:+.2f}%* (`{profit_dollars:+.2f} {self.pair_with}`)\n"
+                        f"`{bought_text}` → `{now_text}` · {vol_text} units\n"
+                        f"🎯 TP `{tp_pct:+.2f}%` · 🛡 SL `{sl_pct:.2f}%` · ⏱ `{time_held}`",
                     )
                 )
 
@@ -674,8 +679,8 @@ class NotificationManager:
                     table_message = self._format_positions_table(balance_report)
                     self.bot.reply_to(
                         message,
-                        f"📋 *Current Positions*\n\n<pre>{table_message}</pre>",
-                        parse_mode="HTML",
+                        f"📋 *Open Positions ({balance_data['positions']})*\n\n{table_message}",
+                        parse_mode="Markdown",
                     )
                 else:
                     self.bot.reply_to(
