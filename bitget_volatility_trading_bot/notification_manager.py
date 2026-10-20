@@ -334,22 +334,20 @@ class NotificationManager:
         try:
             positions = self._get_positions_data(balance_data)
 
-            # Compact 5-column layout - Telegram <pre> wraps around ~45
+            # Compact 4-column layout - Telegram <pre> wraps around ~40
             # monospace chars on phones, so keep the row width tight.
             table = PrettyTable()
-            table.field_names = ["Symbol", "Price", "Chg %", "P&L $", "Held"]
+            table.field_names = ["Symbol", "Chg %", "P&L $", "Held"]
 
             table.padding_width = 1
             table.border = False
             table.align["Symbol"] = "l"
-            table.align["Price"] = "r"
             table.align["Chg %"] = "r"
             table.align["P&L $"] = "r"
             table.align["Held"] = "r"
 
             rows = []
             for symbol, pos in positions.items():
-                now_at = float(pos.get("now_at", 0))
                 change_pct = float(pos.get("change_perc", 0))
                 profit_dollars = float(pos.get("profit_dollars", 0))
                 time_held = self.calculate_time_held(pos)
@@ -358,11 +356,10 @@ class NotificationManager:
                     (
                         profit_dollars,
                         [
-                            symbol[:12],
-                            f"{now_at:.5f}",
+                            symbol[:10],
                             f"{change_pct:+.2f}%",
                             f"{profit_dollars:+.2f}",
-                            time_held[:10],
+                            time_held[:5],
                         ],
                     )
                 )
