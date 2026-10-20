@@ -2,7 +2,6 @@
 import telebot
 from typing import Dict, Any
 from loguru import logger
-from prettytable import PrettyTable
 from datetime import datetime
 
 
@@ -330,24 +329,22 @@ class NotificationManager:
         return message
 
     def _format_positions_table(self, balance_data: Dict[str, Any]) -> str:
-        """Format positions as comprehensive table with all trading metrics using PrettyTable."""
+        """Format positions as compact per-position blocks - wide tables
+        wrap on phone-sized <pre> blocks, so each position gets 3 short
+        lines keeping all metrics (buy/now price, TP/SL, chg, P&L, held)."""
         try:
             positions = self._get_positions_data(balance_data)
 
-            # Compact 4-column layout - Telegram <pre> wraps around ~40
-            # monospace chars on phones, so keep the row width tight.
-            table = PrettyTable()
-            table.field_names = ["Symbol", "Chg %", "P&L $", "Held"]
-
-            table.padding_width = 1
-            table.border = False
-            table.align["Symbol"] = "l"
-            table.align["Chg %"] = "r"
-            table.align["P&L $"] = "r"
-            table.align["Held"] = "r"
-
             rows = []
             for symbol, pos in positions.items():
+                volume = float(pos.get("volume", 0))
+                bought_at = float(pos.get("bought_at", 0))
+                now_at = float(pos.get("now_at", 0))
+                tp_pct = float(pos.get("tp_perc", 0))
+                if not pos.get("TTP_TSL"):
+                    sl_pct = -float(pos.get("sl_perc", 0))
+                else:
+                    sl_pct = float(pos.get("sl_perc", 0))
                 change_pct = float(pos.get("change_perc", 0))
                 profit_dollars = float(pos.get("profit_dollars", 0))
                 time_held = self.calculate_time_held(pos)
@@ -355,19 +352,14 @@ class NotificationManager:
                 rows.append(
                     (
                         profit_dollars,
-                        [
-                            symbol[:10],
-                            f"{change_pct:+.2f}%",
-                            f"{profit_dollars:+.2f}",
-                            time_held[:5],
-                        ],
+                        f"{symbol} {change_pct:+.2f}% {profit_dollars:+.2f}$\n"
+                        f"{bought_at:.5f} -> {now_at:.5f} x{volume:.2f}\n"
+                        f"TP {tp_pct:+.2f}% SL {sl_pct:.2f}% held {time_held}",
                     )
                 )
 
-            for _, row in sorted(rows, key=lambda r: r[0], reverse=True):
-                table.add_row(row)
-
-            return str(table)
+            blocks = [b for _, b in sorted(rows, key=lambda r: r[0], reverse=True)]
+            return "\n\n".join(blocks)
 
         except (KeyError, ValueError, TypeError) as e:
             logger.error(f"💥 Error formatting comprehensive positions table: {e}")
