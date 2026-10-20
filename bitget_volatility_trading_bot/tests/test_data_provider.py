@@ -201,6 +201,37 @@ class TestVolatilityDetection:
         )
         assert "BTCUSDT" in dp._detect_volatility()
 
+    def test_wrapped_buffer_uses_chronological_order(self, dp):
+        # buffer has 4 slots (2x2); feeding 6 snapshots wraps the head.
+        # Chronological window: 100, 100, 101, 103 -> net +3%.
+        # Linear slot order would compute 101 -> 100 = -0.99% instead.
+        self._feed_prices(
+            dp,
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 101.0},
+            {"BTCUSDT": 103.0},
+        )
+        assert dp.hsp_head == 1  # wrapped
+        assert dp._directional_change("BTCUSDT") == pytest.approx(3.0)
+
+    def test_wrapped_buffer_last_vs_max_uses_newest(self, dp):
+        # chronological window: 104, 102, 101, 103 -> last 103, max 104
+        self._feed_prices(
+            dp,
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 104.0},
+            {"BTCUSDT": 102.0},
+            {"BTCUSDT": 101.0},
+            {"BTCUSDT": 103.0},
+        )
+        assert dp.hsp_head == 0  # wrapped
+        assert dp._last_vs_max_change("BTCUSDT") == pytest.approx(
+            (103.0 - 104.0) / 104.0 * 100
+        )
+
     def test_below_threshold_no_signal(self, dp):
         self._feed_prices(dp, {"BTCUSDT": 100.0}, {"BTCUSDT": 101.0})
         assert dp._detect_volatility() == {}

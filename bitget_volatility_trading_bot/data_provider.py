@@ -276,18 +276,31 @@ class DataProvider:
         except Exception as e:
             logger.error(f"💥 Snapshot record failed: {e}")
 
+    def _chronological_prices(self, symbol: str) -> List[float]:
+        """Symbol prices in buffer order oldest -> newest.
+
+        The ring buffer wraps at hsp_head - iterating the raw list would
+        read slots 0..N in index order, which is NOT chronological once the
+        head has wrapped (slot 0 then holds a recent sample while slot N-1
+        holds an older one). Walk from hsp_head+1 (oldest) to hsp_head
+        (newest) instead.
+        """
+        n = len(self.historical_prices)
+        if n == 0 or self.hsp_head < 0:
+            return []
+        prices = []
+        for i in range(1, n + 1):
+            price_data = self.historical_prices[(self.hsp_head + i) % n]
+            if price_data and symbol in price_data:
+                prices.append(float(price_data[symbol]["price"]))
+        return prices
+
     def _directional_change(self, symbol: str) -> float:
         """Percent change oldest -> newest snapshot in the buffer (signed)."""
         try:
-            first_price = last_price = None
-            for price_data in self.historical_prices:
-                if price_data and symbol in price_data:
-                    p = float(price_data[symbol]["price"])
-                    if first_price is None:
-                        first_price = p
-                    last_price = p
-            if first_price and first_price > 0 and last_price is not None:
-                return (last_price - first_price) / first_price * 100
+            prices = self._chronological_prices(symbol)
+            if len(prices) >= 2 and prices[0] > 0:
+                return (prices[-1] - prices[0]) / prices[0] * 100
         except Exception as e:
             logger.debug(f"⚠️ Error computing directional change for {symbol}: {e}")
         return 0.0
@@ -296,11 +309,7 @@ class DataProvider:
         """Percent distance of the newest price below the window max
         (0.0 = currently at the window high, negative = retraced)."""
         try:
-            prices = [
-                float(price_data[symbol]["price"])
-                for price_data in self.historical_prices
-                if price_data and symbol in price_data
-            ]
+            prices = self._chronological_prices(symbol)
             if prices:
                 window_max = max(prices)
                 if window_max > 0:
