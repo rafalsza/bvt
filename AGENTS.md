@@ -55,6 +55,14 @@ Oct-2023..Oct-2025 holdout returned -$229, PF 0.97, 11/25 positive
 months -> no edge. Bitget history candles cap at 200 rows per request
 (`fetch_data.py` pages by 200; older 1m caches fetched with 1000 are gappy).
 
+WaveTrend (`backtest/wt_backtest.py`, tune Oct-2023..Oct-2025 = BTC bull,
+test Oct-2025..Oct-2026 = BTC bear): pre-registered pick (4h, divergence,
+R3) failed the test (PF 1.48 -> 0.62). Post-hoc observation: the family
+"4h wt1/wt2 cross-up after osmin <= -50/-60 while the last completed daily
+bar has wt1 > wt2" was profitable for every exit variant in both periods
+(tune PF 2.0-8.1 on 18-82 trades, test PF 1.07-2.13 on 107-286 trades) -
+needs a clean third-period check (pre-Oct-2023) before any live use.
+
 Reusable regardless: Bitget/CCXT adapter, risk/loss-limit guards, session
 latch, snapshot recorder + tick-level replay simulator, Telegram, deploy
 pipeline, test suite.
