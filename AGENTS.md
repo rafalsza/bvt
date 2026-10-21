@@ -62,6 +62,9 @@ R3) failed the test (PF 1.48 -> 0.62). Post-hoc observation: the family
 bar has wt1 > wt2" was profitable for every exit variant in both periods
 (tune PF 2.0-8.1 on 18-82 trades, test PF 1.07-2.13 on 107-286 trades) -
 needs a clean third-period check (pre-Oct-2023) before any live use.
+Third-period check (Oct-2022..Oct-2023, 90 symbols, pre-registered in
+`HOLDOUT_*`, `--holdout 1h_until1095d`): primary PF 1.11, family median
+PF 0.81 -> FAIL. WaveTrend: no robust edge.
 
 Reusable regardless: Bitget/CCXT adapter, risk/loss-limit guards, session
 latch, snapshot recorder + tick-level replay simulator, Telegram, deploy
