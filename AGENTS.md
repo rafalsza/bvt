@@ -65,6 +65,10 @@ needs a clean third-period check (pre-Oct-2023) before any live use.
 Third-period check (Oct-2022..Oct-2023, 90 symbols, pre-registered in
 `HOLDOUT_*`, `--holdout 1h_until1095d`): primary PF 1.11, family median
 PF 0.81 -> FAIL. WaveTrend: no robust edge.
+`backtest/wt75_backtest.py` (wt1 <= -75 only, no volume; touch/up/cross x
+4 filters x 4 exits x 1h/4h, all 3 periods): 0/96 configs profitable in
+every period with n>=30; rs_wavetrend.py logic (touch, below EMA200, exit
+wt1>60) loses everywhere (PF 0.54-0.92).
 
 Reusable regardless: Bitget/CCXT adapter, risk/loss-limit guards, session
 latch, snapshot recorder + tick-level replay simulator, Telegram, deploy
