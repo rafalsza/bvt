@@ -23,7 +23,32 @@ Guards active in config:
   `user_data/cooloffs.json` so restarts don't erase them.
 
 Runtime state in `user_data/` (mounted volume, gitignored): `transactions.db`,
-`coins_bought.json`, `cooloffs.json`, `creds.yml`.
+`coins_bought.json`, `cooloffs.json`, `creds.yml`, `session_stop.json`,
+`snapshots/` (10s tick recorder, ~60MB/day gz, cron keeps 30 days).
+
+## Strategy status (2026-10-21): SUSPENDED - no edge found
+
+The pump-detector strategy is paused on ora-1 via `TRADE_SLOTS: 0` in the
+VPS `user_data/config.yml` (blocks new buys; open positions still managed;
+the snapshot recorder keeps writing). Do NOT re-enable buys without a
+fundamentally different entry signal.
+
+Evidence from 5 days of recorded live ticks (15M samples, 307 symbols,
+`backtest/replay_snapshots.py`, `analyze_live_entries.py`, `analyze_exits.py`,
+`validate_regime.py`):
+- 44 real post-ring-buffer-fix trades: -184 USDT (WR ~34%).
+- Winners and losers have statistically identical entry features - no entry
+  gate separates them (losers actually had *stronger* signals).
+- Exhaustive sweep of 2160 entry+exit configs on real ticks: ZERO profitable.
+- Regime gate ("recent successful pumps" +3% before -1.5%) fails: successes
+  occur 400-800x/day, flag never turns off, gated trades still lose.
+- Root cause: buying at the local window max after +2.5% means chasing the
+  top; median coin mean-reverts. The earlier positive backtest lived off
+  rare crash-day pumps (+30-50%), which did not occur this week.
+
+What works and is reusable for a future strategy: Bitget/CCXT adapter,
+risk/loss-limit guards, session latch, snapshot recorder + tick-level
+replay simulator, Telegram, deploy pipeline, test suite.
 
 ## Verify changes
 
