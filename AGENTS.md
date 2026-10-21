@@ -85,6 +85,14 @@ Always run the test suite **before every commit/push** - no exceptions:
 Backtest tooling lives in `backtest/` (separate venv `.venv-bt`, data caches and
 reports are gitignored).
 
+**User preference: always use vectorbt (`vectorbt` 1.0.0 in `.venv-bt`) for
+backtests** - `vbt.Portfolio.from_signals` (or `from_order_func` when exits
+need custom logic), fees 0.1%/side, multi-symbol via column-wise DataFrames
+with `cash_sharing`/`group_by` for slot-limited portfolios. Hand-rolled
+simulators (`ob_backtest.py`, `wt_backtest.py`, `wt75_backtest.py`,
+`replay_snapshots.py`) predate this rule; tick-level snapshot replays
+(irregular 10s ticks) are the only exception.
+
 ## Deployment (ora-1 Oracle VPS, ~1GB RAM)
 
 - Container `bvt_bot` runs TEST_MODE via `deploy/docker-compose.ora1.yml`
