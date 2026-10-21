@@ -72,6 +72,11 @@ wt1>60) loses everywhere (PF 0.54-0.92). vectorbt re-run
 (`backtest/wt75_vbt.py`): still 0/96 PASS. Every-signal 4h touch+ob60 is
 strong in 2022-23/2023-25 (PF 2.2/1.9, mass rebounds after market-wide
 dumps) but loses in 2025-26 (PF 0.86); with 5 shared slots PF 1.28/0.93/0.74.
+Bottom confirmation (`backtest/wt75_confirm_vbt.py`: market breadth of
+wt1<-60, BTC wt1<-60 or BTC daily WT bull, close above event-bar high):
+0/192 pass. Best shape 4h + BTC oversold + xdn0 exit: PF 4.3 / 6.8 / 0.90
+- huge in 2022-25, loses in the 2025-26 BTC bear. No confirmation lifts
+the worst-period PF.
 
 Reusable regardless: Bitget/CCXT adapter, risk/loss-limit guards, session
 latch, snapshot recorder + tick-level replay simulator, Telegram, deploy
