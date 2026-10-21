@@ -77,6 +77,10 @@ wt1<-60, BTC wt1<-60 or BTC daily WT bull, close above event-bar high):
 0/192 pass. Best shape 4h + BTC oversold + xdn0 exit: PF 4.3 / 6.8 / 0.90
 - huge in 2022-25, loses in the 2025-26 BTC bear. No confirmation lifts
 the worst-period PF.
+BTC long-horizon regime (`backtest/wt75_regime_vbt.py`, post-hoc; BTC
+daily close > SMA200/SMA100 from `data/btc_1d.pkl`): 0/24 pass. SMA200 is
+ON only 20% of 2025-26, so it mostly just stops trading there (n<=48) and
+also cuts 2023-25 profits (e.g. ob60 +$20.9k -> -$2.7k).
 
 Reusable regardless: Bitget/CCXT adapter, risk/loss-limit guards, session
 latch, snapshot recorder + tick-level replay simulator, Telegram, deploy
