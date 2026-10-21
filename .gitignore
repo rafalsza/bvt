@@ -39,3 +39,4 @@ backtest/report/
 
 # tick data snapshots (volume-mounted, can be large)
 user_data/snapshots/
+backtest/snapshot_data/
