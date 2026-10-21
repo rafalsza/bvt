@@ -68,7 +68,10 @@ PF 0.81 -> FAIL. WaveTrend: no robust edge.
 `backtest/wt75_backtest.py` (wt1 <= -75 only, no volume; touch/up/cross x
 4 filters x 4 exits x 1h/4h, all 3 periods): 0/96 configs profitable in
 every period with n>=30; rs_wavetrend.py logic (touch, below EMA200, exit
-wt1>60) loses everywhere (PF 0.54-0.92).
+wt1>60) loses everywhere (PF 0.54-0.92). vectorbt re-run
+(`backtest/wt75_vbt.py`): still 0/96 PASS. Every-signal 4h touch+ob60 is
+strong in 2022-23/2023-25 (PF 2.2/1.9, mass rebounds after market-wide
+dumps) but loses in 2025-26 (PF 0.86); with 5 shared slots PF 1.28/0.93/0.74.
 
 Reusable regardless: Bitget/CCXT adapter, risk/loss-limit guards, session
 latch, snapshot recorder + tick-level replay simulator, Telegram, deploy
