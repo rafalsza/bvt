@@ -4,7 +4,7 @@ Downloads 1m candles for the top-N symbols from the CoinGecko ticker
 list and caches them as per-symbol pickles in backtest/data/1m/.
 Supports resume: re-running skips symbols that already cover the range.
 
-Usage: python fetch_data.py [days] [top_n] [timeframe] [tickers_file]
+Usage: python fetch_data.py [days] [top_n] [timeframe] [tickers_file] [end_days_ago]
 """
 
 import os
@@ -94,6 +94,7 @@ def fetch_symbol(symbol: str, since_ms: int, end_ms: int, days: int) -> str:
         cursor = last_ts + TF_MS[TIMEFRAME]
         time.sleep(REQ_PAUSE)
 
+    all_candles = [c for c in all_candles if c[0] < end_ms]
     if len(all_candles) < 200:
         return f"{symbol}: only {len(all_candles)} candles, skipped"
 
@@ -116,9 +117,15 @@ def main():
         TIMEFRAME = sys.argv[3]
         DATA_DIR = os.path.join(DATA_ROOT, TIMEFRAME)
 
+    end_days_ago = int(sys.argv[5]) if len(sys.argv) > 5 else 0
+    if end_days_ago:
+        DATA_DIR = f"{DATA_DIR}_until{end_days_ago}d"
+
     os.makedirs(DATA_DIR, exist_ok=True)
     symbols = load_symbols(sys.argv[4] if len(sys.argv) > 4 else TICKERS_FILE)[:top_n]
-    end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    end_ms = int(
+        (datetime.now(timezone.utc) - timedelta(days=end_days_ago)).timestamp() * 1000
+    )
     since_ms = int(
         (datetime.now(timezone.utc) - timedelta(days=days)).timestamp() * 1000
     )

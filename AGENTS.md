@@ -26,7 +26,7 @@ Runtime state in `user_data/` (mounted volume, gitignored): `transactions.db`,
 `coins_bought.json`, `cooloffs.json`, `creds.yml`, `session_stop.json`,
 `snapshots/` (10s tick recorder, ~60MB/day gz, cron keeps 30 days).
 
-## Strategy status (2026-10-21): DIP-BUY MODE active
+## Strategy status (2026-10-21): PAUSED (dip-mode configured, TRADE_SLOTS 0)
 
 Pump momentum was retired after tick-level replay proved it has no edge
 (`backtest/replay_snapshots.py`, `analyze_*.py`, `validate_regime.py` on
@@ -43,6 +43,17 @@ and `DIP_BOUNCE_TICKS` non-decreasing tail ticks. Exits are plain TP/SL
 (`USE_TRAILING_STOP_LOSS: false`, TAKE_PROFIT 1.0 / STOP_LOSS 4.0).
 Tick replay of this shape: ~78% WR, ~+$35-225/week depending on trade
 frequency limits - thin edge, keep it in TEST_MODE until proven live.
+
+Dip-mode live sample was ~breakeven and an exact-gate tick replay gave
+~$0 over 5 days, so the bot is paused again (`TRADE_SLOTS: 0`, recorder on).
+
+Order blocks (smart-money-concepts `smc.ob()`, causal re-implementation in
+`backtest/ob_backtest.py`, 1h, 253 symbols): 4556-config sweep median PF
+~0.83; FVG / 4h-structure confluence barely moves it. Best config
+(`FROZEN` in the script) made +$857/yr PF 1.17 in-sample but on an unseen
+Oct-2023..Oct-2025 holdout returned -$229, PF 0.97, 11/25 positive
+months -> no edge. Bitget history candles cap at 200 rows per request
+(`fetch_data.py` pages by 200; older 1m caches fetched with 1000 are gappy).
 
 Reusable regardless: Bitget/CCXT adapter, risk/loss-limit guards, session
 latch, snapshot recorder + tick-level replay simulator, Telegram, deploy

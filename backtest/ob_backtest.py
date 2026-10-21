@@ -203,9 +203,49 @@ def portfolio(trades, slots=5):
     return taken
 
 
+# Config picked on Oct-2025..Oct-2026 data; evaluated untouched on holdout.
+FROZEN = dict(L=10, R=3.0, W=12, pct=60, volr=0.0, risk=(1.0, 5.0), fvg=True)
+
+
+def run_frozen(data, hold):
+    cfg = FROZEN
+    trades = []
+    for sym, df in data.items():
+        obs, ohlc = find_obs(df, cfg["L"])
+        idx = df.index
+        for ob in obs:
+            if ob["pct"] < cfg["pct"] or ob["volr"] < cfg["volr"]:
+                continue
+            if cfg["fvg"] and not ob["fvg"]:
+                continue
+            t = sim_trade(ob, ohlc, cfg["R"], cfg["W"], hold)
+            if t is None:
+                continue
+            j, k, ret, risk = t
+            if not cfg["risk"][0] <= risk * 100 <= cfg["risk"][1]:
+                continue
+            trades.append((idx[j], idx[k], sym, ret))
+    print(f"frozen cfg {cfg}")
+    n, wr, net, pf = stats([t[3] for t in trades])
+    print(f"every signal: n={n} wr={wr:.1f}% net=${net:.0f} PF={pf:.2f}")
+    tk = pd.DataFrame(portfolio(trades), columns=["et", "xt", "sym", "ret"])
+    n, wr, net, pf = stats(list(tk.ret))
+    print(f"portfolio 5 slots x ${TRADE_USDT:.0f}: n={n} wr={wr:.1f}% net=${net:.0f} PF={pf:.2f}")
+    tk["m"] = tk.et.dt.strftime("%Y-%m")
+    monthly = (tk.groupby("m").ret.sum() * TRADE_USDT).round(0)
+    print("monthly $: " + " ".join(f"{k[2:]}:{int(v):+d}" for k, v in monthly.items()))
+    print(f"positive months: {(monthly > 0).sum()}/{len(monthly)}")
+    eq = (tk.sort_values("xt").ret * TRADE_USDT).cumsum()
+    print(f"max drawdown: ${(eq.cummax() - eq).max():.0f}")
+
+
 def main():
     tf = sys.argv[1] if len(sys.argv) > 1 else "1h"
     data = load(tf)
+    if "--frozen" in sys.argv:
+        print(f"{len(data)} symbols ({tf})")
+        run_frozen(data, 7 * 24 if tf.startswith("1h") else 7 * 96)
+        return
     print(f"{len(data)} symbols ({tf})")
     t_all = pd.concat([d.index.to_series() for d in data.values()])
     t0, t1 = t_all.min(), t_all.max()
