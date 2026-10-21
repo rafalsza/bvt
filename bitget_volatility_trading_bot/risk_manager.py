@@ -144,8 +144,13 @@ class RiskManager:
             day_start = datetime.now().replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
+            signal = (
+                "volatility_dip"
+                if self.config.get("DIP_MODE_ENABLED")
+                else None
+            )
             stats = self.portfolio_manager.db_interface.get_symbol_day_stats(
-                coin, day_start
+                coin, day_start, signal=signal
             )
             reasons = []
             if max_losses > 0 and stats["losing_trades"] >= max_losses:

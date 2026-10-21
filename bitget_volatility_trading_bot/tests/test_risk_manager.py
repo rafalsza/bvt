@@ -171,6 +171,16 @@ class TestDailyLossLimit:
         )
         assert rm.validate_signals({"UMXMUSDT": {"buy_signal": "x"}}) == {}
 
+    def test_dip_mode_filters_stats_by_signal(self, rm, portfolio):
+        rm.config["DIP_MODE_ENABLED"] = True
+        rm.config["SYMBOL_DAILY_LOSS_LIMIT_PCT"] = 4.0
+        portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(
+            1, -10.0
+        )
+        assert rm._check_daily_symbol_loss_limit("UMXMUSDT") is True
+        args, kwargs = portfolio.db_interface.get_symbol_day_stats.call_args
+        assert kwargs.get("signal") == "volatility_dip"
+
     def test_does_not_block_sells(self, rm, portfolio):
         rm.config["MAX_LOSSES_PER_SYMBOL_PER_DAY"] = 1
         portfolio.db_interface.get_symbol_day_stats.return_value = self._stats(

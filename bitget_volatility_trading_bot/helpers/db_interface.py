@@ -460,21 +460,29 @@ class DbInterface:
                 "worst_trade": 0,
             }
 
-    def get_symbol_day_stats(self, symbol: str, since) -> Dict[str, Any]:
-        """Losing-trade count and net realized P&L for a symbol since `since`."""
+    def get_symbol_day_stats(
+        self, symbol: str, since, signal: str = None
+    ) -> Dict[str, Any]:
+        """Losing-trade count and net realized P&L for a symbol since `since`.
+        Optional `signal` restricts the count to a single buy_signal value."""
         try:
+            signal_clause = (
+                " AND buy_signal = :signal" if signal else ""
+            )
             query = db.text(
-                """
+                f"""
                 SELECT
                     COALESCE(SUM(CASE WHEN profit_dollars < 0 THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(profit_dollars), 0)
                 FROM transactions
                 WHERE symbol = :symbol AND closed = 1 AND sell_time >= :since
+                {signal_clause}
                 """
             )
-            result = self.connection.execute(
-                query, {"symbol": symbol, "since": since}
-            ).fetchone()
+            params = {"symbol": symbol, "since": since}
+            if signal:
+                params["signal"] = signal
+            result = self.connection.execute(query, params).fetchone()
             return {
                 "losing_trades": int(result[0] or 0),
                 "realized_pnl": float(result[1] or 0.0),
