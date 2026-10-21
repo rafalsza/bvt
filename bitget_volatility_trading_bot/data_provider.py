@@ -45,6 +45,15 @@ class DataProvider:
         self.COINS_MIN_VOLUME = config.get("COINS_MIN_VOLUME", 0)
         self.COINS_MAX_VOLUME = config.get("COINS_MAX_VOLUME", float("inf"))
 
+        # Dip-buy mode: fade fast dumps instead of chasing pumps.
+        # Requires a real net drop, last price near the window minimum and a
+        # small bounce (last DIP_BOUNCE_TICKS snapshots non-decreasing) so we
+        # buy the turn, not the falling knife.
+        self.DIP_MODE_ENABLED = config.get("DIP_MODE_ENABLED", False)
+        self.DIP_DROP_PCT = config.get("DIP_DROP_PCT", -1.5)
+        self.DIP_NEAR_MIN_PCT = config.get("DIP_NEAR_MIN_PCT", 0.5)
+        self.DIP_BOUNCE_TICKS = int(config.get("DIP_BOUNCE_TICKS", 2))
+
         # Market regime filter: block new buys when the reference asset
         # (default BTC) is in a fast drop or a broad 24h downtrend.
         self.MARKET_FILTER_ENABLED = config.get("MARKET_FILTER_ENABLED", False)
@@ -318,6 +327,32 @@ class DataProvider:
             logger.debug(f"⚠️ Error computing last-vs-max for {symbol}: {e}")
         return 0.0
 
+    def _last_vs_min_change(self, symbol: str) -> float:
+        """Percent distance of the newest price above the window min
+        (0.0 = currently at the window low)."""
+        try:
+            prices = self._chronological_prices(symbol)
+            if prices:
+                window_min = min(prices)
+                if window_min > 0:
+                    return (prices[-1] - window_min) / window_min * 100
+        except Exception as e:
+            logger.debug(f"⚠️ Error computing last-vs-min for {symbol}: {e}")
+        return 0.0
+
+    def _has_bounce(self, symbol: str, ticks: int) -> bool:
+        """True if the last `ticks` consecutive steps are non-decreasing
+        (price stopped falling and started ticking up)."""
+        try:
+            prices = self._chronological_prices(symbol)
+            if len(prices) < ticks + 1:
+                return False
+            tail = prices[-(ticks + 1):]
+            return all(tail[i] >= tail[i - 1] for i in range(1, len(tail))) and tail[-1] > tail[0]
+        except Exception as e:
+            logger.debug(f"⚠️ Error computing bounce for {symbol}: {e}")
+        return False
+
     def _market_allows_buys(self, current_prices: Dict[str, Dict[str, Any]]) -> bool:
         """Block new buys while the market reference (BTC) is dropping fast
         or sitting in a broad 24h downtrend. Missing data never blocks."""
@@ -428,27 +463,42 @@ class DataProvider:
 
                     # Directional move (signed, first -> last snapshot) tells
                     # pump apart from dump - the unsigned range alone cannot.
-                    # A coin that pumped AND fully retraced inside the window
-                    # (net ~0%) is a bad entry - the wave is over.
                     directional = self._directional_change(symbol)
-                    min_net = self.config.get("MIN_NET_GAIN_PCT", 1.0)
-                    if directional < min_net:
-                        continue
 
-                    # Dead-cat guard: the bounce that produced the positive
-                    # net move must still be alive at signal time. Entries
-                    # well below the window max buy the retrace into a dump.
-                    near_max = self.config.get("LAST_NEAR_MAX_PCT")
-                    if near_max is not None:
-                        last_vs_max = self._last_vs_max_change(symbol)
-                        if last_vs_max < -abs(near_max):
+                    if self.DIP_MODE_ENABLED:
+                        # Dip-buy: fade the dump. Needs a real net drop, the
+                        # last price near the window minimum and a small
+                        # bounce so we buy the turn, not the falling knife.
+                        if directional > self.DIP_DROP_PCT:
                             continue
+                        if self._last_vs_min_change(symbol) > self.DIP_NEAR_MIN_PCT:
+                            continue
+                        if not self._has_bounce(symbol, self.DIP_BOUNCE_TICKS):
+                            continue
+                    else:
+                        # Pump mode: a coin that pumped AND fully retraced
+                        # inside the window (net ~0%) is a bad entry.
+                        min_net = self.config.get("MIN_NET_GAIN_PCT", 1.0)
+                        if directional < min_net:
+                            continue
+
+                        # Dead-cat guard: the bounce that produced the
+                        # positive net move must still be alive at signal time.
+                        near_max = self.config.get("LAST_NEAR_MAX_PCT")
+                        if near_max is not None:
+                            last_vs_max = self._last_vs_max_change(symbol)
+                            if last_vs_max < -abs(near_max):
+                                continue
 
                     volatile_coins[symbol] = {
                         "buy_signal": (
-                            "volatility_gain"
-                            if directional >= 0
-                            else "volatility_drop"
+                            "volatility_dip"
+                            if self.DIP_MODE_ENABLED
+                            else (
+                                "volatility_gain"
+                                if directional >= 0
+                                else "volatility_drop"
+                            )
                         ),
                         "value": 1,
                         "gain": round(directional, 3),

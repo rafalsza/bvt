@@ -349,6 +349,78 @@ class TestMarketFilter:
         assert "PUMPUSDT" in dp.get_trading_signals()
 
 
+class TestDipMode:
+    def _mk(self, client, **cfg):
+        with patch("data_provider.ExternalSignalManager") as esm:
+            provider = DataProvider(
+                client, _make_config(DIP_MODE_ENABLED=True, **cfg)
+            )
+            provider.external_signal_manager = esm.return_value
+            return provider
+
+    def _feed(self, dp, *snaps):
+        dp.initialize_historical_data()
+        for snap in snaps:
+            dp._add_to_historical(
+                {s: {"price": p, "time": datetime.now()} for s, p in snap.items()}
+            )
+
+    def test_dump_bounce_at_min_signals(self, client):
+        # 105 -> 99.4 dump (-5.1% net, range ~5.6%), then 2 up-ticks at the
+        # bottom: buy the turn
+        dp = self._mk(client)
+        self._feed(
+            dp,
+            {"BTCUSDT": 105.0},
+            {"BTCUSDT": 99.4},
+            {"BTCUSDT": 99.5},
+            {"BTCUSDT": 99.6},
+        )
+        signals = dp._detect_volatility()
+        assert signals["BTCUSDT"]["buy_signal"] == "volatility_dip"
+
+    def test_falling_knife_without_bounce_blocked(self, client):
+        # dump but last tick still below the previous one - knife still falling
+        dp = self._mk(client)
+        self._feed(
+            dp,
+            {"BTCUSDT": 105.0},
+            {"BTCUSDT": 99.4},
+            {"BTCUSDT": 99.6},
+            {"BTCUSDT": 99.5},
+        )
+        assert dp._detect_volatility() == {}
+
+    def test_bounce_too_far_above_min_blocked(self, client):
+        # bounced 0.7% off the min already - the turn was missed
+        dp = self._mk(client)
+        self._feed(
+            dp,
+            {"BTCUSDT": 105.0},
+            {"BTCUSDT": 99.4},
+            {"BTCUSDT": 99.6},
+            {"BTCUSDT": 100.1},
+        )
+        assert dp._detect_volatility() == {}
+
+    def test_pump_blocked_in_dip_mode(self, client):
+        dp = self._mk(client)
+        self._feed(dp, {"BTCUSDT": 100.0}, {"BTCUSDT": 105.0})
+        assert dp._detect_volatility() == {}
+
+    def test_shallow_drop_blocked(self, client):
+        # dip below the -1.5% net gate never signals even with a bounce
+        dp = self._mk(client)
+        self._feed(
+            dp,
+            {"BTCUSDT": 100.0},
+            {"BTCUSDT": 96.0},   # range 4% ok but...
+            {"BTCUSDT": 99.0},   # ...net is only -1%: bounce already recovered
+            {"BTCUSDT": 99.1},
+        )
+        assert dp._detect_volatility() == {}
+
+
 class TestPriceChange:
     def test_min_max_based_change(self, dp):
         dp.initialize_historical_data()

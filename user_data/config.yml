@@ -14,7 +14,17 @@ script_options:
   TEST_MODE: true
   UTA_MODE: true
 trading_options:
-  CHANGE_IN_PRICE: 2.5
+  CHANGE_IN_PRICE: 3.0
+  # --- DIP-BUY MODE (validated on recorded ticks 2026-10-17..21) ---
+  # Pump momentum was retired: on 5 days of real ticks every config lost.
+  # The market mean-reverts, so we fade dumps instead: buy after a >=3%
+  # range with a real net drop, price near the window minimum and the
+  # last 2 ticks ticking up (buy the turn, not the falling knife).
+  DIP_MODE_ENABLED: true
+  DIP_DROP_PCT: -1.5
+  DIP_NEAR_MIN_PCT: 0.5
+  DIP_BOUNCE_TICKS: 2
+  # --- pump-mode params (inactive while DIP_MODE_ENABLED) ---
   # min signed move (first->last snapshot in the window) for a signal -
   # range alone also fires on drops or fully retraced pumps (+0.00% gain)
   MIN_NET_GAIN_PCT: 1.0
@@ -110,13 +120,15 @@ trading_options:
   SESSION_TPSL_OVERRIDE: true
   SIGNALLING_MODULES:
   - import_bitget_tickers_coingecko
-  STOP_LOSS: 3.0
-  TAKE_PROFIT: 5.0
+  # dip-mode exits = plain TP/SL (no trailing): sim showed SL4/TP1
+  # with ~78% WR; wide SL absorbs the knife, small TP banks the bounce
+  STOP_LOSS: 4.0
+  TAKE_PROFIT: 1.0
   TICKERS_LIST: tickerlists/tickers_bitget_USDT.txt
   TIME_DIFFERENCE: 1
-  TRADE_SLOTS: 10
+  TRADE_SLOTS: 5
   TRADE_TOTAL: 500
   TRADING_FEE: 0.1
   TRAILING_STOP_LOSS: 1.0
   TRAILING_TAKE_PROFIT: 1.0
-  USE_TRAILING_STOP_LOSS: true
+  USE_TRAILING_STOP_LOSS: false

@@ -26,29 +26,27 @@ Runtime state in `user_data/` (mounted volume, gitignored): `transactions.db`,
 `coins_bought.json`, `cooloffs.json`, `creds.yml`, `session_stop.json`,
 `snapshots/` (10s tick recorder, ~60MB/day gz, cron keeps 30 days).
 
-## Strategy status (2026-10-21): SUSPENDED - no edge found
+## Strategy status (2026-10-21): DIP-BUY MODE active
 
-The pump-detector strategy is paused on ora-1 via `TRADE_SLOTS: 0` in the
-VPS `user_data/config.yml` (blocks new buys; open positions still managed;
-the snapshot recorder keeps writing). Do NOT re-enable buys without a
-fundamentally different entry signal.
-
-Evidence from 5 days of recorded live ticks (15M samples, 307 symbols,
-`backtest/replay_snapshots.py`, `analyze_live_entries.py`, `analyze_exits.py`,
-`validate_regime.py`):
+Pump momentum was retired after tick-level replay proved it has no edge
+(`backtest/replay_snapshots.py`, `analyze_*.py`, `validate_regime.py` on
+5 days, 15M ticks, 307 symbols):
 - 44 real post-ring-buffer-fix trades: -184 USDT (WR ~34%).
-- Winners and losers have statistically identical entry features - no entry
-  gate separates them (losers actually had *stronger* signals).
-- Exhaustive sweep of 2160 entry+exit configs on real ticks: ZERO profitable.
-- Regime gate ("recent successful pumps" +3% before -1.5%) fails: successes
-  occur 400-800x/day, flag never turns off, gated trades still lose.
-- Root cause: buying at the local window max after +2.5% means chasing the
-  top; median coin mean-reverts. The earlier positive backtest lived off
-  rare crash-day pumps (+30-50%), which did not occur this week.
+- Winners/losers statistically identical at entry; 2160-config sweep: zero
+  profitable; regime gating (success count, signal density) also fails.
+- Root cause: buying at the window max chases tops; this market mean-reverts.
 
-What works and is reusable for a future strategy: Bitget/CCXT adapter,
-risk/loss-limit guards, session latch, snapshot recorder + tick-level
-replay simulator, Telegram, deploy pipeline, test suite.
+Active strategy (`DIP_MODE_ENABLED: true` in `user_data/config.yml`):
+fade fast dumps - signal needs `CHANGE_IN_PRICE`% window range, signed net
+<= `DIP_DROP_PCT`, last price within `DIP_NEAR_MIN_PCT` of the window min
+and `DIP_BOUNCE_TICKS` non-decreasing tail ticks. Exits are plain TP/SL
+(`USE_TRAILING_STOP_LOSS: false`, TAKE_PROFIT 1.0 / STOP_LOSS 4.0).
+Tick replay of this shape: ~78% WR, ~+$35-225/week depending on trade
+frequency limits - thin edge, keep it in TEST_MODE until proven live.
+
+Reusable regardless: Bitget/CCXT adapter, risk/loss-limit guards, session
+latch, snapshot recorder + tick-level replay simulator, Telegram, deploy
+pipeline, test suite.
 
 ## Verify changes
 
