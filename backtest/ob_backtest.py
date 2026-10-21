@@ -53,7 +53,9 @@ def confirmed_swings(h, l, L):
     hi_max = pd.Series(h).rolling(2 * L).max().shift(-L).values
     lo_min = pd.Series(l).rolling(2 * L).min().shift(-L).values
     last_high = np.full(n, -1, dtype=np.int64)  # last confirmed swing high at bar i
+    last_low = np.full(n, -1, dtype=np.int64)
     cur_high = -1
+    cur_low = -1
     prev_type = 0
     prev_idx = -1
     for i in range(n):
@@ -75,19 +77,57 @@ def confirmed_swings(h, l, L):
             elif t == -1:
                 if prev_type == -1:
                     if l[k] < l[prev_idx]:
+                        cur_low = k
                         prev_idx = k
                 else:
+                    cur_low = k
                     prev_type, prev_idx = -1, k
         last_high[i] = cur_high
-    return last_high
+        last_low[i] = cur_low
+    return last_high, last_low
+
+
+def htf_structure(df, L=5):
+    """Per completed 4h bar: +1 if the last structure break (close beyond
+    the last confirmed swing) was bullish, -1 if bearish, 0 unknown.
+    Returns (bar_open_times, state)."""
+    d4 = df.resample("4h", label="left", closed="left").agg(
+        {"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+    h, l, c = (d4[x].values.astype(float) for x in ("high", "low", "close"))
+    lh, ll = confirmed_swings(h, l, L)
+    state = np.zeros(len(c), dtype=np.int8)
+    st, crossed_h, crossed_l = 0, set(), set()
+    for i in range(len(c)):
+        s = lh[i]
+        if s >= 0 and s not in crossed_h and c[i] > h[s]:
+            crossed_h.add(s)
+            st = 1
+        s = ll[i]
+        if s >= 0 and s not in crossed_l and c[i] < l[s]:
+            crossed_l.add(s)
+            st = -1
+        state[i] = st
+    return d4.index.values, state
 
 
 def find_obs(df, L):
     o, h, l, c, v = (df[x].values.astype(float) for x in ("open", "high", "low", "close", "volume"))
-    last_high = confirmed_swings(h, l, L)
+    last_high, _ = confirmed_swings(h, l, L)
     crossed = set()
     vavg = pd.Series(v).rolling(50, min_periods=10).mean().values
     ema = pd.Series(c).ewm(span=200, adjust=False).mean().values
+    # library smc.fvg bullish: high[m-1] < low[m+1] and candle m bullish;
+    # stored at m+1 (the bar where it becomes known)
+    fvg_known = np.zeros(len(c), dtype=bool)
+    fvg_known[2:] = (h[:-2] < l[2:]) & (c[1:-1] > o[1:-1])
+    fvg_cum = np.concatenate([[0], np.cumsum(fvg_known)])
+    htf = np.zeros(len(c), dtype=np.int8)
+    if isinstance(df.index, pd.DatetimeIndex):
+        t4, st4 = htf_structure(df)
+        bar = df.index.values
+        k = np.searchsorted(t4, bar - np.timedelta64(3, "h"), side="right") - 1
+        ok = k >= 0
+        htf[ok] = st4[k[ok]]
     obs = []
     for i in range(2, len(c)):
         s = last_high[i]
@@ -104,7 +144,10 @@ def find_obs(df, L):
         pct = min(hv, lv) / mx * 100 if mx else 100.0
         volr = (v[i] + v[i - 1] + v[i - 2]) / (3 * vavg[i]) if vavg[i] > 0 else 0.0
         obs.append(dict(i=i, top=top, bot=bot, pct=pct, volr=volr,
-                        trend=c[i] > ema[i], disp=(c[i] - top) / top * 100))
+                        trend=c[i] > ema[i], disp=(c[i] - top) / top * 100,
+                        # FVG center m in (ob_i, i) -> known at m+1 in [ob_i+2, i]
+                        fvg=fvg_cum[i + 1] - fvg_cum[ob_i + 2] > 0,
+                        htf=htf[i] == 1))
     return obs, (o, h, l, c)
 
 
@@ -193,17 +236,24 @@ def main():
                         continue
                     j, k, ret, risk = t
                     rows.append((L, R, W, ob["pct"], ob["volr"], ob["trend"], risk * 100,
-                                 idx[j], idx[k], sym, ret))
+                                 ob["fvg"], ob["htf"], idx[j], idx[k], sym, ret))
     df = pd.DataFrame(rows, columns=["L", "R", "W", "pct", "volr", "trend", "risk",
-                                     "et", "xt", "sym", "ret"])
-    print(f"{len(df)} simulated trades total")
+                                     "fvg", "htf", "et", "xt", "sym", "ret"])
+    print(f"{len(df)} simulated trades total; with FVG {df.fvg.mean()*100:.0f}%, "
+          f"HTF bullish {df.htf.mean()*100:.0f}%")
 
+    FVGs = [False, True]
+    HTFs = [False, True]
     res = []
     for (L, R, W), g in df.groupby(["L", "R", "W"]):
-        for P, V, T, (rlo, rhi) in product(PCTs, VOLRs, TRENDs, RISKs):
+        for P, V, T, (rlo, rhi), F, H in product(PCTs, VOLRs, TRENDs, RISKs, FVGs, HTFs):
             m = (g.pct >= P) & (g.volr >= V) & (g.risk >= rlo) & (g.risk <= rhi)
             if T:
                 m &= g.trend
+            if F:
+                m &= g.fvg
+            if H:
+                m &= g.htf
             s = g[m]
             if len(s) < 30:
                 continue
@@ -211,34 +261,51 @@ def main():
             oos = s[s.et >= split]
             ni, wi, pi, pfi = stats(list(ins.ret))
             no, wo, po, pfo = stats(list(oos.ret))
-            res.append((pi, L, R, W, P, V, T, rlo, rhi, ni, wi, pfi, no, wo, po, pfo))
+            res.append((pi, L, R, W, P, V, T, rlo, rhi, F, H, ni, wi, pfi, no, wo, po, pfo))
     res.sort(key=lambda x: -x[0])
-    hdr = (" L    R   W  pct volr trd risk     | IS: n    wr%     net$    PF  | "
+    hdr = (" L    R   W  pct volr trd risk   fvg htf | IS: n    wr%     net$    PF  | "
            "OOS: n   wr%     net$    PF")
-    print("\n=== top 20 by in-sample net (every OB taken, $500/trade) ===")
+    print("\n=== top 25 by in-sample net (every OB taken, $500/trade) ===")
     print(hdr)
-    for r in res[:20]:
-        pi, L, R, W, P, V, T, rlo, rhi, ni, wi, pfi, no, wo, po, pfo = r
-        print(f"{L:2d} {R:4.1f} {W:3d} {P:4d} {V:4.1f} {int(T):3d} {rlo:.1f}-{rhi:.0f}  | "
+    for r in res[:25]:
+        pi, L, R, W, P, V, T, rlo, rhi, F, H, ni, wi, pfi, no, wo, po, pfo = r
+        print(f"{L:2d} {R:4.1f} {W:3d} {P:4d} {V:4.1f} {int(T):3d} {rlo:.1f}-{rhi:.0f} "
+              f"{int(F):3d} {int(H):3d} | "
               f"{ni:5d} {wi:5.1f} {pi:8.0f} {pfi:5.2f} | {no:5d} {wo:5.1f} {po:8.0f} {pfo:5.2f}")
-    pos_both = [r for r in res if r[0] > 0 and r[14] > 0]
+    pos_both = [r for r in res if r[0] > 0 and r[16] > 0]
     print(f"\nconfigs profitable IS: {sum(1 for r in res if r[0] > 0)}/{len(res)}; "
           f"IS and OOS: {len(pos_both)}")
 
+    print("\n=== filter effect across all configs (median PF, share OOS-profitable) ===")
+    rd = pd.DataFrame(res, columns=["pi", "L", "R", "W", "P", "V", "T", "rlo", "rhi", "F", "H",
+                                    "ni", "wi", "pfi", "no", "wo", "po", "pfo"])
+    for col in ("F", "H", "T"):
+        for val in (False, True):
+            s = rd[rd[col] == val]
+            print(f"{col}={int(val)}: configs={len(s):4d} medPF IS={s.pfi.median():.3f} "
+                  f"OOS={s.pfo.median():.3f}  OOS>0: {(s.po > 0).mean()*100:.0f}%")
+    s = rd[rd.F & rd.H]
+    print(f"F=1&H=1: configs={len(s):4d} medPF IS={s.pfi.median():.3f} "
+          f"OOS={s.pfo.median():.3f}  OOS>0: {(s.po > 0).mean()*100:.0f}%")
+
     print("\n=== portfolio (5 slots, 1 pos/symbol) for top-5 IS configs ===")
     for r in res[:5]:
-        pi, L, R, W, P, V, T, rlo, rhi = r[:9]
+        pi, L, R, W, P, V, T, rlo, rhi, F, H = r[:11]
         g = df[(df.L == L) & (df.R == R) & (df.W == W) & (df.pct >= P) & (df.volr >= V)
                & (df.risk >= rlo) & (df.risk <= rhi)]
         if T:
             g = g[g.trend]
+        if F:
+            g = g[g.fvg]
+        if H:
+            g = g[g.htf]
         taken = portfolio(list(zip(g.et, g.xt, g.sym, g.ret)))
         tk = pd.DataFrame(taken, columns=["et", "xt", "sym", "ret"])
         tk["m"] = tk.et.dt.strftime("%Y-%m")
         monthly = (tk.groupby("m").ret.sum() * TRADE_USDT).round(0)
         n, wr, net, pf = stats(list(tk.ret))
-        print(f"L{L} R{R} W{W} pct{P} volr{V} trend{int(T)} risk{rlo}-{rhi}: "
-              f"n={n} wr={wr:.1f}% net=${net:.0f} PF={pf:.2f}")
+        print(f"L{L} R{R} W{W} pct{P} volr{V} trend{int(T)} risk{rlo}-{rhi} fvg{int(F)} "
+              f"htf{int(H)}: n={n} wr={wr:.1f}% net=${net:.0f} PF={pf:.2f}")
         print("   monthly $: " + " ".join(f"{k[2:]}:{int(v):+d}" for k, v in monthly.items()))
 
 
