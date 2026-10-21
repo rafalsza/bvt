@@ -4,7 +4,7 @@ Downloads 1m candles for the top-N symbols from the CoinGecko ticker
 list and caches them as per-symbol pickles in backtest/data/1m/.
 Supports resume: re-running skips symbols that already cover the range.
 
-Usage: python fetch_data.py [days] [top_n]
+Usage: python fetch_data.py [days] [top_n] [timeframe] [tickers_file]
 """
 
 import os
@@ -22,7 +22,14 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TICKERS_FILE = os.path.join(
     REPO_ROOT, "bitget_volatility_trading_bot", "tickerlists", "tickers_bitget_USDT.txt"
 )
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "1m")
+DATA_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+DATA_DIR = os.path.join(DATA_ROOT, "1m")
+TIMEFRAME = "1m"
+TF_MS = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000}
+
+# Bitget history-candles caps at 200 rows; a larger limit makes ccxt request
+# a wider window and silently drops everything past the first 200 -> gaps.
+BATCH = 200
 
 DAYS = 365
 TOP_N = 30
@@ -33,8 +40,8 @@ MAX_RETRIES = 8
 _rate_lock = threading.Lock()
 
 
-def load_symbols() -> list:
-    with open(TICKERS_FILE) as f:
+def load_symbols(path: str = TICKERS_FILE) -> list:
+    with open(path) as f:
         return [line.strip() for line in f if line.strip()]
 
 
@@ -68,7 +75,7 @@ def fetch_symbol(symbol: str, since_ms: int, end_ms: int, days: int) -> str:
     while cursor < end_ms:
         try:
             batch = ex.fetch_ohlcv(
-                ccxt_symbol, "1m", since=cursor, limit=1000, params={"uta": False}
+                ccxt_symbol, TIMEFRAME, since=cursor, limit=BATCH, params={"uta": False}
             )
         except (ccxt.NetworkError, ccxt.ExchangeError) as e:
             retries += 1
@@ -84,10 +91,10 @@ def fetch_symbol(symbol: str, since_ms: int, end_ms: int, days: int) -> str:
         last_ts = batch[-1][0]
         if last_ts <= cursor:
             break
-        cursor = last_ts + 60_000
+        cursor = last_ts + TF_MS[TIMEFRAME]
         time.sleep(REQ_PAUSE)
 
-    if len(all_candles) < 500:
+    if len(all_candles) < 200:
         return f"{symbol}: only {len(all_candles)} candles, skipped"
 
     df = pd.DataFrame(
@@ -104,9 +111,13 @@ def fetch_symbol(symbol: str, since_ms: int, end_ms: int, days: int) -> str:
 def main():
     days = int(sys.argv[1]) if len(sys.argv) > 1 else DAYS
     top_n = int(sys.argv[2]) if len(sys.argv) > 2 else TOP_N
+    global TIMEFRAME, DATA_DIR
+    if len(sys.argv) > 3:
+        TIMEFRAME = sys.argv[3]
+        DATA_DIR = os.path.join(DATA_ROOT, TIMEFRAME)
 
     os.makedirs(DATA_DIR, exist_ok=True)
-    symbols = load_symbols()[:top_n]
+    symbols = load_symbols(sys.argv[4] if len(sys.argv) > 4 else TICKERS_FILE)[:top_n]
     end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     since_ms = int(
         (datetime.now(timezone.utc) - timedelta(days=days)).timestamp() * 1000
@@ -114,7 +125,7 @@ def main():
 
     todo = [s for s in symbols if not already_done(s, days, since_ms)]
     print(
-        f"Fetching {days}d of 1m candles: {len(todo)} symbols to do "
+        f"Fetching {days}d of {TIMEFRAME} candles: {len(todo)} symbols to do "
         f"({len(symbols) - len(todo)} cached)",
         flush=True,
     )
