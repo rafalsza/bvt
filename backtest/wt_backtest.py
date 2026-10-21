@@ -202,7 +202,38 @@ def fmt(s):
             f"months+={s['pos']}/{s['months']} DD=${s['dd']:.0f}")
 
 
+# Pre-registered (2026-10-21, before downloading Oct-2022..Oct-2023 data):
+# primary config and the whole 4h + daily-WT family; PASS needs primary
+# PF >= 1.15 and median family PF > 1.15.
+HOLDOUT_PRIMARY = ("4h", -50, "htf", "R2")
+HOLDOUT_FAMILY = [("4h", o, "htf", e) for o in (-50, -60) for e in EXITS]
+
+
+def run_holdout(sub):
+    data = load(sub)
+    print(f"HOLDOUT {sub}: {len(data)} symbols", flush=True)
+    x = run(data)
+    pfs = []
+    for cfg in HOLDOUT_FAMILY:
+        s = summary(portfolio(select(x, *cfg)))
+        pfs.append(s["pf"])
+        mark = "  <- primary" if cfg == HOLDOUT_PRIMARY else ""
+        print(f"{str(cfg):32s} {fmt(s)}{mark}")
+    p = summary(portfolio(select(x, *HOLDOUT_PRIMARY)))
+    if p["n"]:
+        print("primary monthly $: " + " ".join(
+            f"{k[2:]}:{int(v):+d}" for k, v in p["monthly"].items()))
+    med = float(np.median(pfs))
+    ok = p["pf"] >= 1.15 and med > 1.15
+    print(f"\nprimary PF={p['pf']:.2f}, family median PF={med:.2f} -> "
+          f"{'PASS' if ok else 'FAIL'}")
+
+
 def main():
+    import sys
+    if "--holdout" in sys.argv:
+        run_holdout(sys.argv[sys.argv.index("--holdout") + 1])
+        return
     tune = load(TUNE_DIR)
     print(f"TUNE {TUNE_DIR}: {len(tune)} symbols", flush=True)
     tdf = run(tune)
