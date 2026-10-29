@@ -46,9 +46,11 @@ frequency limits - thin edge, keep it in TEST_MODE until proven live.
 
 Dip-mode live sample was ~breakeven and an exact-gate tick replay gave
 ~$0 over 5 days, so the bot is paused again (`TRADE_SLOTS: 0`).
-Snapshot recording re-enabled on ora-1 on 2026-10-29 (`SNAPSHOT_RECORD: true`,
-`TRADE_SLOTS: 0` — records ~300 symbols without trading) to gather a fresh
-out-of-sample tick set for the pump-filter hypothesis (below).
+Snapshot recording re-enabled on ora-1 on 2026-10-29 (`SNAPSHOT_RECORD: true`)
+to gather a fresh out-of-sample tick set for the pump-filter hypothesis
+(below). Same day user re-enabled trading (`TRADE_SLOTS: 5`, still TEST_MODE,
+dip mode) to collect a parallel live sample; transactions.db was wiped clean
+first, so all stats from 2026-10-29 onward are the dip-mode live test.
 Pump-filter study (2026-10-29, `backtest/pump_filter_study.py`,
 `pump_filter_combo.py`, `pump_filter_phase2.py`; caches `parsed_v2.pkl`,
 `events_v2.pkl` include volume+chg24): on 6 days (Oct 17-22) no single
