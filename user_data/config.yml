@@ -20,7 +20,7 @@ trading_options:
   # The market mean-reverts, so we fade dumps instead: buy after a >=3%
   # range with a real net drop, price near the window minimum and the
   # last 2 ticks ticking up (buy the turn, not the falling knife).
-  DIP_MODE_ENABLED: true
+  DIP_MODE_ENABLED: false
   DIP_DROP_PCT: -1.5
   DIP_NEAR_MIN_PCT: 0.5
   DIP_BOUNCE_TICKS: 2
@@ -120,10 +120,10 @@ trading_options:
   SESSION_TPSL_OVERRIDE: true
   SIGNALLING_MODULES:
   - import_bitget_tickers_coingecko
-  # dip-mode exits: wide SL absorbs the knife; TAKE_PROFIT arms the
-  # trailing stop at +1%, then 1% trail / 1% TTP ride the bounce
-  STOP_LOSS: 4.0
-  TAKE_PROFIT: 1.0
+  # pump-mode exits: base SL 3%; trailing arms at TAKE_PROFIT +5%,
+  # then 1% trail below max / 1% TTP spike above it
+  STOP_LOSS: 3.0
+  TAKE_PROFIT: 5.0
   TICKERS_LIST: tickerlists/tickers_bitget_USDT.txt
   TIME_DIFFERENCE: 1
   TRADE_SLOTS: 5
