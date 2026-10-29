@@ -56,8 +56,10 @@ Pump-filter study (2026-10-29, `backtest/pump_filter_study.py`,
 `events_v2.pkl` include volume+chg24): on 6 days (Oct 17-22) no single
 filter saves pump entries, but `pre>=1-2% AND wvol>=5k USDT AND 8-19 UTC`
 with SL3/arm5/trail1 gave +33% on ~51 coupled trades — thin, possibly
-multiple-testing noise. Hypothesis to validate on the new data, NOT
-deployed; filters are not implemented in the bot.
+multiple-testing noise. Implemented in the bot on 2026-10-29 as
+`PUMP_FILTER_*` config gates (`data_provider._pump_quality_ok`):
+window traded volume, pre-window trend, UTC hour band. Live in TEST_MODE
+alongside the recording, pending the out-of-sample check.
 
 Order blocks (smart-money-concepts `smc.ob()`, causal re-implementation in
 `backtest/ob_backtest.py`, 1h, 253 symbols): 4556-config sweep median PF
