@@ -2,7 +2,8 @@
 import os
 import csv
 import gzip
-from datetime import datetime
+from collections import deque
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from loguru import logger
 from helpers.bitget_client import BitgetClient
@@ -53,6 +54,20 @@ class DataProvider:
         self.DIP_DROP_PCT = config.get("DIP_DROP_PCT", -1.5)
         self.DIP_NEAR_MIN_PCT = config.get("DIP_NEAR_MIN_PCT", 0.5)
         self.DIP_BOUNCE_TICKS = int(config.get("DIP_BOUNCE_TICKS", 2))
+
+        # Pump-signal quality filters (tick-replay study 2026-10-29):
+        # a pump only continued when there was real traded volume inside
+        # the signal window, an up-move already running before it, and the
+        # signal fired inside the favorable UTC hour band.
+        self.PUMP_FILTER_ENABLED = config.get("PUMP_FILTER_ENABLED", False)
+        self.PUMP_MIN_WINDOW_VOLUME = config.get("PUMP_MIN_WINDOW_VOLUME", 5000)
+        self.PUMP_MIN_PRETREND_PCT = config.get("PUMP_MIN_PRETREND_PCT", 1.0)
+        self.PUMP_HOUR_START_UTC = int(config.get("PUMP_HOUR_START_UTC", 8))
+        self.PUMP_HOUR_END_UTC = int(config.get("PUMP_HOUR_END_UTC", 20))
+        # per-symbol (price, volume) trail covering the signal window plus
+        # the preceding window, needed by the filters above
+        self._trail = {}
+        self._trail_maxlen = 0
 
         # Market regime filter: block new buys when the reference asset
         # (default BTC) is in a fast drop or a broad 24h downtrend.
@@ -106,6 +121,8 @@ class DataProvider:
             # Initialize historical prices array with None values
             self.historical_prices = [None] * storage_size
             self.hsp_head = -1
+            self._trail = {}
+            self._trail_maxlen = 2 * storage_size
 
             logger.info(
                 f"📈 Historical data initialized - Storage size: {storage_size}"
@@ -251,6 +268,15 @@ class DataProvider:
             # Store prices at current position
             self.historical_prices[self.hsp_head] = prices
 
+            if self.PUMP_FILTER_ENABLED:
+                for symbol, d in prices.items():
+                    trail = self._trail.get(symbol)
+                    if trail is None:
+                        trail = self._trail[symbol] = deque(
+                            maxlen=self._trail_maxlen
+                        )
+                    trail.append((float(d["price"]), float(d.get("volume") or 0)))
+
             self._record_snapshot(prices)
 
             logger.debug(
@@ -352,6 +378,40 @@ class DataProvider:
         except Exception as e:
             logger.debug(f"⚠️ Error computing bounce for {symbol}: {e}")
         return False
+
+    def _pump_quality_ok(self, symbol: str) -> bool:
+        """Pump-signal quality gates (only evaluated in pump mode).
+
+        Requires, at signal time: the current UTC hour inside the
+        configured band, at least PUMP_MIN_WINDOW_VOLUME USDT traded inside
+        the signal window and a PUMP_MIN_PRETREND_PCT up-move over the
+        window preceding it. Fails closed until the trail warms up.
+        """
+        if not self.PUMP_FILTER_ENABLED:
+            return True
+        try:
+            hour = datetime.now(timezone.utc).hour
+            if not (self.PUMP_HOUR_START_UTC <= hour < self.PUMP_HOUR_END_UTC):
+                return False
+            n = len(self.historical_prices)
+            trail = self._trail.get(symbol)
+            if not trail or len(trail) < 2 * n:
+                return False
+            wvol = trail[-1][1] - trail[-n - 1][1]
+            if wvol < self.PUMP_MIN_WINDOW_VOLUME:
+                return False
+            base = trail[0][0]
+            pretrend = (trail[-n][0] - base) / base * 100 if base > 0 else 0.0
+            if pretrend < self.PUMP_MIN_PRETREND_PCT:
+                return False
+            logger.debug(
+                f"🧪 Pump filter OK {symbol}: wvol {wvol:.0f} USDT, "
+                f"pretrend {pretrend:+.2f}%"
+            )
+            return True
+        except Exception as e:
+            logger.debug(f"⚠️ Pump filter error for {symbol}: {e}")
+            return False
 
     def _market_allows_buys(self, current_prices: Dict[str, Dict[str, Any]]) -> bool:
         """Block new buys while the market reference (BTC) is dropping fast
@@ -489,6 +549,9 @@ class DataProvider:
                             last_vs_max = self._last_vs_max_change(symbol)
                             if last_vs_max < -abs(near_max):
                                 continue
+
+                        if not self._pump_quality_ok(symbol):
+                            continue
 
                     volatile_coins[symbol] = {
                         "buy_signal": (

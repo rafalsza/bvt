@@ -444,6 +444,97 @@ class TestPriceChange:
         assert dp._calculate_price_change("BTCUSDT") == 0.0
 
 
+class TestPumpQualityFilter:
+    """PUMP_FILTER_* gates: window traded volume, pre-window trend, UTC
+    hour band. Buffer is 4 slots (2x2), trail holds the last 8."""
+
+    def _mk(self, client, **cfg):
+        cfg.setdefault("PUMP_FILTER_ENABLED", True)
+        cfg.setdefault("PUMP_MIN_WINDOW_VOLUME", 5000)
+        cfg.setdefault("PUMP_MIN_PRETREND_PCT", 1.0)
+        cfg.setdefault("PUMP_HOUR_START_UTC", 0)
+        cfg.setdefault("PUMP_HOUR_END_UTC", 24)
+        with patch("data_provider.ExternalSignalManager") as esm:
+            provider = DataProvider(client, _make_config(**cfg))
+            provider.external_signal_manager = esm.return_value
+            return provider
+
+    def _feed(self, dp, prices, vols):
+        dp.initialize_historical_data()
+        now = datetime.now()
+        for p, v in zip(prices, vols):
+            dp._add_to_historical(
+                {"BTCUSDT": {"price": p, "volume": v, "time": now}}
+            )
+
+    def test_full_pass_signals(self, client):
+        # pre-window +2.5%, window pump 102.5->107.5, 2000 USDT/tick volume
+        dp = self._mk(client)
+        self._feed(
+            dp,
+            [100.0, 100.5, 101.0, 102.0, 102.5, 104.0, 105.5, 107.5],
+            [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000],
+        )
+        assert "BTCUSDT" in dp._detect_volatility()
+
+    def test_low_window_volume_blocked(self, client):
+        dp = self._mk(client)
+        self._feed(
+            dp,
+            [100.0, 100.5, 101.0, 102.0, 102.5, 104.0, 105.5, 107.5],
+            [0, 100, 200, 300, 400, 500, 600, 700],  # ~700 USDT window vol
+        )
+        assert dp._detect_volatility() == {}
+
+    def test_no_pretrend_blocked(self, client):
+        # flat-ish first window (+0.5% pretrend < 1%), then pump
+        dp = self._mk(client)
+        self._feed(
+            dp,
+            [100.0, 100.0, 100.0, 100.0, 100.5, 103.0, 105.0, 107.0],
+            [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000],
+        )
+        assert dp._detect_volatility() == {}
+
+    def test_short_trail_blocks(self, client):
+        # only 5 snapshots fed, trail needs 8 -> fail closed
+        dp = self._mk(client)
+        self._feed(
+            dp,
+            [100.0, 101.0, 102.0, 104.0, 107.0],
+            [0, 2000, 4000, 6000, 8000],
+        )
+        assert dp._detect_volatility() == {}
+
+    def test_hour_outside_band_blocked(self, client):
+        dp = self._mk(
+            client, PUMP_HOUR_START_UTC=8, PUMP_HOUR_END_UTC=20
+        )
+        self._feed(
+            dp,
+            [100.0, 100.5, 101.0, 102.0, 102.5, 104.0, 105.5, 107.5],
+            [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000],
+        )
+        with patch("data_provider.datetime") as dt:
+            dt.now.return_value.hour = 22
+            assert dp._detect_volatility() == {}
+
+    def test_disabled_filter_ignores_gates(self, client):
+        with patch("data_provider.ExternalSignalManager") as esm:
+            provider = DataProvider(
+                client, _make_config(PUMP_FILTER_ENABLED=False)
+            )
+            provider.external_signal_manager = esm.return_value
+        provider.initialize_historical_data()
+        provider._add_to_historical(
+            {"BTCUSDT": {"price": 100.0, "time": datetime.now()}}
+        )
+        provider._add_to_historical(
+            {"BTCUSDT": {"price": 105.0, "time": datetime.now()}}
+        )
+        assert "BTCUSDT" in provider._detect_volatility()
+
+
 class TestDelistedCoins:
     def test_extracts_and_dedupes(self, dp, client):
         client.get_spot_delist_schedule.return_value = [

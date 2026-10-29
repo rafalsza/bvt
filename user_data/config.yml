@@ -31,6 +31,17 @@ trading_options:
   # dead-cat guard: last price must stay within 1.5% of the window max,
   # else the bounce already faded and we buy the retrace into a dump
   LAST_NEAR_MAX_PCT: 1.5
+  # --- pump-signal quality filters (tick-replay study 2026-10-29) ---
+  # the only combo positive in the coupled sim: real window volume,
+  # an up-move already running before the window, favorable UTC hours
+  PUMP_FILTER_ENABLED: true
+  # >=5000 USDT traded inside the ~3min signal window
+  PUMP_MIN_WINDOW_VOLUME: 5000
+  # net % move over the 3min window BEFORE the signal window
+  PUMP_MIN_PRETREND_PCT: 1.0
+  # only take signals with hour in [START, END) UTC (8-19 in the study)
+  PUMP_HOUR_START_UTC: 8
+  PUMP_HOUR_END_UTC: 20
   # record every ~10s price snapshot to user_data/snapshots/*.csv.gz
   # (~20MB/day) - real tick data for later backtest/optimization
   SNAPSHOT_RECORD: true
