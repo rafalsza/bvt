@@ -126,7 +126,7 @@ trading_options:
   TAKE_PROFIT: 1.0
   TICKERS_LIST: tickerlists/tickers_bitget_USDT.txt
   TIME_DIFFERENCE: 1
-  TRADE_SLOTS: 5
+  TRADE_SLOTS: 0
   TRADE_TOTAL: 500
   TRADING_FEE: 0.1
   TRAILING_STOP_LOSS: 1.0

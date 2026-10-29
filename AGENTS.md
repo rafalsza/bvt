@@ -45,7 +45,17 @@ Tick replay of this shape: ~78% WR, ~+$35-225/week depending on trade
 frequency limits - thin edge, keep it in TEST_MODE until proven live.
 
 Dip-mode live sample was ~breakeven and an exact-gate tick replay gave
-~$0 over 5 days, so the bot is paused again (`TRADE_SLOTS: 0`, recorder on).
+~$0 over 5 days, so the bot is paused again (`TRADE_SLOTS: 0`).
+Snapshot recording re-enabled on ora-1 on 2026-10-29 (`SNAPSHOT_RECORD: true`,
+`TRADE_SLOTS: 0` — records ~300 symbols without trading) to gather a fresh
+out-of-sample tick set for the pump-filter hypothesis (below).
+Pump-filter study (2026-10-29, `backtest/pump_filter_study.py`,
+`pump_filter_combo.py`, `pump_filter_phase2.py`; caches `parsed_v2.pkl`,
+`events_v2.pkl` include volume+chg24): on 6 days (Oct 17-22) no single
+filter saves pump entries, but `pre>=1-2% AND wvol>=5k USDT AND 8-19 UTC`
+with SL3/arm5/trail1 gave +33% on ~51 coupled trades — thin, possibly
+multiple-testing noise. Hypothesis to validate on the new data, NOT
+deployed; filters are not implemented in the bot.
 
 Order blocks (smart-money-concepts `smc.ob()`, causal re-implementation in
 `backtest/ob_backtest.py`, 1h, 253 symbols): 4556-config sweep median PF
@@ -81,6 +91,91 @@ BTC long-horizon regime (`backtest/wt75_regime_vbt.py`, post-hoc; BTC
 daily close > SMA200/SMA100 from `data/btc_1d.pkl`): 0/24 pass. SMA200 is
 ON only 20% of 2025-26, so it mostly just stops trading there (n<=48) and
 also cuts 2023-25 profits (e.g. ob60 +$20.9k -> -$2.7k).
+2026-10-22 exploratory entry/exit matrix (`backtest/wt75_variants_vbt.py`):
+5 entries x 5 exits x 1h/4h, BTC and basket, all three already-seen periods.
+Uses vectorbt fill-price stop anchoring; equity-based dollar drawdown and
+monthly results include open positions. Pivot confirmation delayed 3 bars;
+prefix-invariance check passed. No configuration meets PF >=1.1 and n>=30
+in every period. Basket 1h divergence + 3R: every-symbol PF 1.095/1.527/1.347,
+shared 2500 USDT PF 0.986/0.868/0.800. Shared cash includes fees, so this is
+not a strict five-slot implementation. BTC divergence + structure + 2R has
+only 2/2/3 trades per period: insufficient evidence. Reports are gitignored
+under `backtest/report/wt75_variants/`; regenerate HTML with `--report-only`.
+Tight-stop follow-up (`backtest/wt75_tight_vbt.py`): touch/up x SL 1/2/3%
+x TP 1.5R/2R or WT1 crossing zero, timeout 24 bars from actual fill using
+from_signals callbacks. BTC + basket, 1h/4h, three periods: 0/108 scope/mode
+rows pass PF>=1.1 and n>=30 in every period. Best basket every-symbol worst
+PF is 0.931 (4h touch, SL3%, TP4.5%); best shared worst PF is 0.827
+(4h touch, SL3%, TP6%). Timeout/stop/re-entry/open-priority synthetic checks
+pass (`--self-test`). Important limitation: from_signals skips stops on the
+entry candle; tight-stop results remain approximate and do not validate live
+execution. Timeout 24 bars means 24h on 1h and 96h on 4h. HTML/CSV under
+`backtest/report/wt75_tight/`, `--report-only` regenerates the HTML.
+`backtest/wt75_bottom_timing.py` is a descriptive event study (not a trade
+simulator): signal-candle low vs next 12 candles, missing/gapped windows
+excluded. Basket lower lows after -75 occur in 64/74/75% of 1h events and
+70/67/78% of 4h events across the three periods. Median lowest-low lag
+including signal candle is 2/3/3 bars on 1h and 3/1/3 on 4h. This supports
+using -75 as setup activation rather than immediate entry, not profitability
+or a fixed optimal delay. Overlapping/correlated events and right-censoring
+at bar 12 prevent treating samples as independent confirmed bottoms.
+Reports: `backtest/report/wt75_bottom_timing/`.
+First-turn study: `wt75_tight_vbt.py --turn` arms on crossing below -75,
+then triggers only on the first subsequent WT1 increase (one signal per
+crossing, next-open fill). Same nine SL/exit combinations and 24-bar timeout.
+0/54 scope/mode rows pass across three periods. Basket shared, SL3%, WT0
+exit: 1h PF 0.922/0.632/0.731; 4h PF 0.714/1.139/0.972. BTC 4h same
+configuration PF 3.027/1.758/2.798, but only 2/6/4 closed trades: insufficient
+sample. First-turn/prefix-causality and timeout checks passed; same entry-bar
+stop limitation remains. Reports in `backtest/report/wt75_turn/` compare
+against saved tight-study touch/up results. Regenerate with `--turn --report-only`.
+User-defined hindsight phase study: `backtest/wt75_phases_vbt.py`, bull
+2022-11-20..2025-10-05 inclusive, bear 2025-10-06..2026-07-01 inclusive,
+later from 2026-07-02; UTC dates. Merges all three caches (253 symbols,
+zero conflicting duplicate OHLC rows), warms indicators on continuous history,
+resets capital/positions each phase, values remaining open positions at end.
+27 unchanged tight-study combinations per timeframe, BTC + basket. Three
+basket every-symbol rows meet PF>=1.1/n>=30 in all phases: 4h touch, WT0
+exit, SL1/2/3%. SL3% PF bull/bear/later 1.302/1.110/1.730; same shared
+2500 USDT PF 1.030/0.561/2.115. No shared-capital configuration passes.
+BTC 4h first-turn/SL3%/WT0 has 7/5/0 trades: too sparse. Hindsight labels,
+changing available universe (121 bull, 253 bear/later), correlated signals,
+short later phase and entry-bar stop omission prevent live-edge claims.
+Reports `backtest/report/wt75_phases/`; `--report-only` rebuilds HTML.
+Reused external `C:/python_projects/trading-python/backtest/vectorbt-tests/
+wavetrend-backtest/w_params.py` (read-only, parsed via ast.literal_eval) and
+10..39 x 10..39 grid in `backtest/wt75_parameter_grid_vbt.py`. Saved per-coin
+vs 10/21 uses matched 116 Bitget symbols; full900 grid uses BTC/ETH separately,
+1h/4h, touch/first-turn, same user phases. Fixed SL3%, WT0 exit, max24 bars.
+This study corrects entry-candle SL omission by two vectorbt execution steps
+per candle: open, then OHLC range at synthetic +1ns. Indicators remain on
+original bars; callbacks use48 steps for24 bars. Synthetic tests cover
+entry-bar SL, timeout and open-exit priority. Intrabar sequence is still unknown.
+Saved settings do not give stable shared2500 improvement. Grid0/7200 pass
+PF>=1.1/n>=30 every phase, but no candidate has30 trades in every phase;
+short later phase limits inference. Among candidates with >=10 trades each
+phase, best worst PF is0.858. BTC4h first-turn10/10 has PF1.465/1.107/1.337
+on68/23/3 trades; promising-looking but exploratory and too few recent trades.
+Reports `backtest/report/wt75_parameter_grid/` include saved source mapping,
+per-coin CSVs, full grid, rankings, heatmaps. `--report-only` regenerates HTML.
+Earlier study results are not directly comparable: both execution model and
+matched universe differ. No external project or VPS trading changes made.
+Capital diagnosis `backtest/wt75_capital_vbt.py`: frozen4h WT10/21 touch,
+SL3%, WT0/max24bars. Uses vectorbt from_order_func for strict5/10/20 caps,
+post-fill state/audit, fee-inclusive500/250/125 entry budgets, entry-bar and
+gap-open SL. Tests cover cap, budgets, stops, timeout and identical independent
+event reference execution.12 predetermined column orders (alphabetic/reverse/
+10 seeded permutations), same2500 reset per user phase, full available universe.
+Median marked-to-market net for5/10/20: bull+194/+20/+58; bear-1144/-734/-277;
+later+1169/+576/+256 USDT. Every ordering loses in bear for all3 layouts.
+Alphabetic5: bull460 accepted/758 cash-blocked; independent complete-window
+reference mean return taken+0.039% vs missed+0.395%; bear taken-1.180% vs
+missed-0.128%; later taken+2.292% vs missed-1.263%. This is descriptive,
+not a causal ranking rule. Concentration: alphabetic5 later closed net+1123,
+contribution of best5 symbols+1385; subtracting it leaves-262 (attribution,
+not a rerun excluding those coins). Loss of edge is not solved by slot count.
+Reports `backtest/report/wt75_capital/` include audit CSVs, event references,
+trades, equity and concentration. `--report-only` rebuilds HTML. No deployment.
 
 Reusable regardless: Bitget/CCXT adapter, risk/loss-limit guards, session
 latch, snapshot recorder + tick-level replay simulator, Telegram, deploy
