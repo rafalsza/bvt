@@ -208,10 +208,14 @@ simulators (`ob_backtest.py`, `wt_backtest.py`, `wt75_backtest.py`,
 
 - Container `bvt_bot` runs TEST_MODE via `deploy/docker-compose.ora1.yml`
   (512M limit, volumes: `user_data/`, `logs/`, `tickerlists/`; `TZ=Europe/Warsaw`).
+- **Image comes from GHCR**: `.github/workflows/docker.yml` builds
+  `ghcr.io/rafalsza/bvt:latest` on pushes to main that touch
+  `Dockerfile-bot`/`requirements.txt`/`bitget_volatility_trading_bot/` or
+  the workflow itself (repo is public -> anonymous pull works).
 - **Config-only changes** (mounted `user_data/`): `docker restart bvt_bot` is enough.
-- **Code changes** (`*.py`, Dockerfile, requirements): `docker restart` does NOT
-  pick them up - the image must be rebuilt:
-  `docker compose -f deploy/docker-compose.ora1.yml up -d --build`.
+- **Code changes**: wait for the workflow to finish, then
+  `docker compose -f deploy/docker-compose.ora1.yml pull && up -d`.
+  `up -d --build` remains as a local-build fallback.
 - **After every deploy/rebuild, always remove superseded images:**
   `docker image prune -f` (disk is only 45GB; stale images = hundreds of MB each).
   `deploy/setup-ora1.sh` already does this at the end.
