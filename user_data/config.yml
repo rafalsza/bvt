@@ -120,15 +120,15 @@ trading_options:
   SESSION_TPSL_OVERRIDE: true
   SIGNALLING_MODULES:
   - import_bitget_tickers_coingecko
-  # dip-mode exits = plain TP/SL (no trailing): sim showed SL4/TP1
-  # with ~78% WR; wide SL absorbs the knife, small TP banks the bounce
+  # dip-mode exits: wide SL absorbs the knife; TAKE_PROFIT arms the
+  # trailing stop at +1%, then 1% trail / 1% TTP ride the bounce
   STOP_LOSS: 4.0
   TAKE_PROFIT: 1.0
   TICKERS_LIST: tickerlists/tickers_bitget_USDT.txt
   TIME_DIFFERENCE: 1
-  TRADE_SLOTS: 0
+  TRADE_SLOTS: 5
   TRADE_TOTAL: 500
   TRADING_FEE: 0.1
   TRAILING_STOP_LOSS: 1.0
   TRAILING_TAKE_PROFIT: 1.0
-  USE_TRAILING_STOP_LOSS: false
+  USE_TRAILING_STOP_LOSS: true
