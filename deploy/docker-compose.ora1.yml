@@ -4,10 +4,13 @@
 
 services:
   bvt-bot:
+    # CI builds and pushes this image to GHCR on every code change
+    # (see .github/workflows/docker.yml) - prefer `docker compose pull`
+    # over building on the VPS. `build:` stays as a fallback.
     build:
       context: ..
       dockerfile: Dockerfile-bot
-    image: bvt_bot:latest
+    image: ghcr.io/rafalsza/bvt:latest
     container_name: bvt_bot
     restart: unless-stopped
     environment:
