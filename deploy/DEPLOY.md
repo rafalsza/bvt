@@ -17,12 +17,21 @@ bash deploy/setup-ora1.sh
 
 Skrypt: swap 4G -> build -> `docker compose up -d`.
 
+## Obraz z GHCR
+
+GitHub Actions (`.github/workflows/docker.yml`) buduje
+`ghcr.io/rafalsza/bvt:latest` przy kazdym pushu do main, ktory dotyka
+kodu/Dockerfile/requirements. Repo jest publiczne, wiec pull dziala bez
+logowania. Sekcja `build:` w compose zostaje jako fallback.
+
 ## Operacje
 
 ```bash
 docker logs -f bvt_bot                                   # logi na zywo
 docker compose -f deploy/docker-compose.ora1.yml down    # stop
-git -C ~/bvt pull && docker compose -f deploy/docker-compose.ora1.yml up -d --build && docker image prune -f   # update (+ always drop old images)
+# update kodu: poczekaj az workflow zbuduje obraz, potem:
+git -C ~/bvt pull && docker compose -f deploy/docker-compose.ora1.yml pull && docker compose -f deploy/docker-compose.ora1.yml up -d && docker image prune -f
+docker restart bvt_bot                                   # samo config.yml (mount) wystarczy restart
 docker stats bvt_bot                                     # RAM/CPU
 ```
 
