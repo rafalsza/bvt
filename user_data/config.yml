@@ -37,8 +37,11 @@ trading_options:
   PUMP_FILTER_ENABLED: true
   # >=5000 USDT traded inside the ~3min signal window
   PUMP_MIN_WINDOW_VOLUME: 5000
-  # net % move over the 3min window BEFORE the signal window
-  PUMP_MIN_PRETREND_PCT: 1.0
+  # net % move over the 3min window BEFORE the signal window; -1 means
+  # "not actively dumping" instead of "already pumping" - requiring +1%
+  # delayed every entry by a full window (AINUSDT 2026-10-31: blocked the
+  # spike start @0.205, entry slipped to @0.228 -> SL)
+  PUMP_MIN_PRETREND_PCT: -1.0
   # hour band DISABLED (0-24): the 2026-10-31 AINUSDT +61% run fired the
   # detector ~90x entirely outside 8-19 UTC - night mega-pumps were being
   # filtered out wholesale, the study's "toxic hours" finding was too
