@@ -39,9 +39,12 @@ trading_options:
   PUMP_MIN_WINDOW_VOLUME: 5000
   # net % move over the 3min window BEFORE the signal window
   PUMP_MIN_PRETREND_PCT: 1.0
-  # only take signals with hour in [START, END) UTC (8-19 in the study)
-  PUMP_HOUR_START_UTC: 8
-  PUMP_HOUR_END_UTC: 20
+  # hour band DISABLED (0-24): the 2026-10-31 AINUSDT +61% run fired the
+  # detector ~90x entirely outside 8-19 UTC - night mega-pumps were being
+  # filtered out wholesale, the study's "toxic hours" finding was too
+  # weak a basis for a hard gate
+  PUMP_HOUR_START_UTC: 0
+  PUMP_HOUR_END_UTC: 24
   # record every ~10s price snapshot to user_data/snapshots/*.csv.gz
   # (~20MB/day) - real tick data for later backtest/optimization
   SNAPSHOT_RECORD: true
