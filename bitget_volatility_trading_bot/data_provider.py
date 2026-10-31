@@ -64,8 +64,11 @@ class DataProvider:
         self.PUMP_MIN_PRETREND_PCT = config.get("PUMP_MIN_PRETREND_PCT", 1.0)
         self.PUMP_HOUR_START_UTC = int(config.get("PUMP_HOUR_START_UTC", 8))
         self.PUMP_HOUR_END_UTC = int(config.get("PUMP_HOUR_END_UTC", 20))
-        # per-symbol (price, volume) trail covering the signal window plus
-        # the preceding window, needed by the filters above
+        # block pump entries on coins already deep in a 24h dump - their
+        # window "pumps" are dead-cat bounces inside a downtrend
+        self.PUMP_MIN_24H_CHANGE_PCT = config.get("PUMP_MIN_24H_CHANGE_PCT")
+        # per-symbol (price, volume, change_24h) trail covering the signal
+        # window plus the preceding window, needed by the filters above
         self._trail = {}
         self._trail_maxlen = 0
 
@@ -275,7 +278,13 @@ class DataProvider:
                         trail = self._trail[symbol] = deque(
                             maxlen=self._trail_maxlen
                         )
-                    trail.append((float(d["price"]), float(d.get("volume") or 0)))
+                    trail.append(
+                        (
+                            float(d["price"]),
+                            float(d.get("volume") or 0),
+                            d.get("change_24h"),
+                        )
+                    )
 
             self._record_snapshot(prices)
 
@@ -403,6 +412,13 @@ class DataProvider:
             base = trail[0][0]
             pretrend = (trail[-n][0] - base) / base * 100 if base > 0 else 0.0
             if pretrend < self.PUMP_MIN_PRETREND_PCT:
+                return False
+            chg24 = trail[-1][2]
+            if (
+                self.PUMP_MIN_24H_CHANGE_PCT is not None
+                and chg24 is not None
+                and chg24 < self.PUMP_MIN_24H_CHANGE_PCT
+            ):
                 return False
             logger.debug(
                 f"🧪 Pump filter OK {symbol}: wvol {wvol:.0f} USDT, "

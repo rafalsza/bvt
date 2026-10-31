@@ -459,12 +459,19 @@ class TestPumpQualityFilter:
             provider.external_signal_manager = esm.return_value
             return provider
 
-    def _feed(self, dp, prices, vols):
+    def _feed(self, dp, prices, vols, chg24=None):
         dp.initialize_historical_data()
         now = datetime.now()
         for p, v in zip(prices, vols):
             dp._add_to_historical(
-                {"BTCUSDT": {"price": p, "volume": v, "time": now}}
+                {
+                    "BTCUSDT": {
+                        "price": p,
+                        "volume": v,
+                        "change_24h": chg24,
+                        "time": now,
+                    }
+                }
             )
 
     def test_full_pass_signals(self, client):
@@ -518,6 +525,27 @@ class TestPumpQualityFilter:
         with patch("data_provider.datetime") as dt:
             dt.now.return_value.hour = 22
             assert dp._detect_volatility() == {}
+
+    def test_deep_24h_dump_blocked(self, client):
+        # coin already -33% on the day: window bounce is a dead cat
+        dp = self._mk(client, PUMP_MIN_24H_CHANGE_PCT=-10)
+        self._feed(
+            dp,
+            [100.0, 100.5, 101.0, 102.0, 102.5, 104.0, 105.5, 107.5],
+            [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000],
+            chg24=-33.0,
+        )
+        assert dp._detect_volatility() == {}
+
+    def test_mild_24h_drop_still_signals(self, client):
+        dp = self._mk(client, PUMP_MIN_24H_CHANGE_PCT=-10)
+        self._feed(
+            dp,
+            [100.0, 100.5, 101.0, 102.0, 102.5, 104.0, 105.5, 107.5],
+            [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000],
+            chg24=-5.0,
+        )
+        assert "BTCUSDT" in dp._detect_volatility()
 
     def test_disabled_filter_ignores_gates(self, client):
         with patch("data_provider.ExternalSignalManager") as esm:
