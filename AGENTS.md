@@ -58,8 +58,24 @@ filter saves pump entries, but `pre>=1-2% AND wvol>=5k USDT AND 8-19 UTC`
 with SL3/arm5/trail1 gave +33% on ~51 coupled trades — thin, possibly
 multiple-testing noise. Implemented in the bot on 2026-10-29 as
 `PUMP_FILTER_*` config gates (`data_provider._pump_quality_ok`):
-window traded volume, pre-window trend, UTC hour band. Live in TEST_MODE
-alongside the recording, pending the out-of-sample check.
+window traded volume, pre-window trend, UTC hour band.
+
+**VERDICT (2026-11-05): pump momentum has no edge — trading disabled.**
+111 live TEST_MODE trades over 8 days: WR 23%, -690 USDT, 7/8 losing days.
+Entry autopsy (`backtest/analyze_trade_entries_live.py` on recorded ticks):
+78% of positions never reached the +5% arm; a large share are literally the
+top tick of the spike (MFE~0 within seconds). The signal is structurally
+post-hoc: a 60s spike fills the 3-min window and dies exactly when detected.
+Variant studies on 7 days of live ticks:
+- window length 3/6/10/15/30min (`pump_window_study.py`): 30min +95% but
+  22 trades concentrated on one day — noise, not edge
+- entry mechanics (`pump_entry_study.py`, `pump_pullback_bounce.py`):
+  signal tick -1061%, pullback 2% -143%, pullback 4%+bounce -71% — nothing
+  reaches breakeven; post-signal drift is negative from every entry point
+- micro-trigger (60s window): catastrophic, catches noise
+Filters left enabled in config (PUMP_FILTER_*: wvol>=5k, pretrend>=-1,
+chg24>=-10, hours off) — they're harmless and documented; TRADE_SLOTS: 0.
+Snapshot recording continues for future studies.
 
 Order blocks (smart-money-concepts `smc.ob()`, causal re-implementation in
 `backtest/ob_backtest.py`, 1h, 253 symbols): 4556-config sweep median PF
